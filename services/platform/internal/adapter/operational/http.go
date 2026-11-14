@@ -20,6 +20,12 @@ func (l *Logger) HTTP(instanceID string, next http.Handler, onError func(error))
 		outcome := "panicked"
 		cause := ""
 		defer func() {
+			// The error callback can panic too; keep its values out of net/http logs.
+			defer func() {
+				if recover() != nil {
+					panic(http.ErrAbortHandler)
+				}
+			}()
 			recovered := recover()
 			if recovered != nil {
 				rw.status = 0
