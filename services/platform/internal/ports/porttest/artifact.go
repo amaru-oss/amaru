@@ -117,12 +117,44 @@ func ArtifactIndex(t *testing.T, newIndex func(t *testing.T) ports.ArtifactIndex
 	t.Run("recording the same attempt again returns the version already stored", func(t *testing.T) {
 		s := newIndex(t)
 		first, _ := s.Record(ctx, ver("report", "e1", "e1.s1", "att-1", "one"))
-		again, err := s.Record(ctx, ver("report", "e1", "e1.s1", "att-1", "one"))
-		if err != nil || again.Version != first.Version {
+		replay := ver("report", "e1", "e1.s1", "att-1", "one")
+		replay.Version = 99
+		replay.CreatedAt = at.Add(time.Hour)
+		again, err := s.Record(ctx, replay)
+		if err != nil || again != first {
 			t.Fatalf("%+v %v", again, err)
 		}
 		if vs, _ := s.Versions(ctx, "report"); len(vs) != 1 {
 			t.Fatalf("%d versions, want 1", len(vs))
+		}
+	})
+
+	t.Run("conflicting capture replay is refused without changing history", func(t *testing.T) {
+		for name, change := range map[string]func(*domain.ArtifactVersion){
+			"hash":       func(v *domain.ArtifactVersion) { v.Hash = domain.ContentHash([]byte("two")) },
+			"size":       func(v *domain.ArtifactVersion) { v.Size++ },
+			"media type": func(v *domain.ArtifactVersion) { v.MediaType = "text/plain" },
+		} {
+			t.Run(name, func(t *testing.T) {
+				s := newIndex(t)
+				v := ver("report", "e1", "e1.s1", "att-1", "one")
+				first, err := s.Record(ctx, v)
+				if err != nil {
+					t.Fatal(err)
+				}
+				change(&v)
+				if got, err := s.Record(ctx, v); !errors.Is(err, domain.ErrExists) || got != (domain.ArtifactVersion{}) {
+					t.Fatalf("conflicting replay: %+v %v", got, err)
+				}
+				vs, err := s.Versions(ctx, v.ArtifactID)
+				if err != nil || len(vs) != 1 || vs[0] != first {
+					t.Fatalf("history changed: %+v %v", vs, err)
+				}
+				v.AttemptID = "att-2"
+				if got, err := s.Record(ctx, v); err != nil || got.Version != 2 {
+					t.Fatalf("new attempt: %+v %v", got, err)
+				}
+			})
 		}
 	})
 

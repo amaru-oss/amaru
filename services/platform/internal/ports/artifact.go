@@ -26,9 +26,10 @@ const DefaultMaxBlob int64 = 1 << 30
 // or deleted.
 type ArtifactIndex interface {
 	// Record stores v as the next version of its Artifact and returns it with Version set. The
-	// same attempt recording the same Artifact again returns the version already stored, so a
-	// retried Record adds nothing. v.Version is ignored. It returns domain.ErrInvalid for an
-	// invalid version.
+	// same Artifact/Execution/Step/attempt/path capture returns the stored version only when
+	// hash, size and media type match; a conflicting replay returns domain.ErrExists.
+	// v.Version is ignored; replay preserves the original CreatedAt. A distinct capture key
+	// creates a new version. It returns domain.ErrInvalid for an invalid version.
 	Record(ctx context.Context, v domain.ArtifactVersion) (domain.ArtifactVersion, error)
 	// Versions returns the versions of the Artifact in order, or an empty slice.
 	Versions(ctx context.Context, artifactID string) ([]domain.ArtifactVersion, error)
