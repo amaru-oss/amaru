@@ -3,6 +3,7 @@ package coordinator_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -107,6 +108,101 @@ func TestWorkflowRejectsForeignCloneProvenance(t *testing.T) {
 		source := selectedWorkflowSource{ports.ProjectWorkflow{Workflow: w, Clone: clone}}
 		if got, err := api.Workflow(ctx, project, "flow", strings.Repeat("a", 40), source); err != domain.ErrInvalid || got.ID != "" {
 			t.Fatalf("foreign/invalid source provenance: %+v %v", got, err)
+		}
+	}
+}
+
+func TestWorkflowPreservesIdentity(t *testing.T) {
+	project := domain.ProjectKey("ssh://example.com/app#" + strings.Repeat("a", 40))
+	for _, operation := range []string{"read", "submit", "replay"} {
+		for _, outcome := range []string{"authorized", "identity changed", "revoked", "canceled", "source error", "source error and revoked", "source error and changed identity", "identity before submit"} {
+			if operation == "read" && outcome == "identity before submit" {
+				continue
+			}
+			t.Run(operation+"/"+outcome, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				owner := domain.Principal{Kind: domain.PrincipalHuman, ID: "original-owner", Role: domain.RoleOwner}
+				current, revoked, calls := owner, false, 0
+				projects := fakes.NewProjectStore()
+				if err := projects.Create(ctx, domain.Project{Key: project, Name: "App", CreatedAt: time.Now()}); err != nil {
+					t.Fatal(err)
+				}
+				store := &mutationAuthorityStore{ExecutionStore: fakes.NewExecutionStore()}
+				armed := false
+				api, err := coordinator.NewProjectAccess(coordinator.New(store, time.Now), projects, func(context.Context) (domain.Principal, error) {
+					calls++
+					// Two checks per Project lookup; the fifth begins submission authorization.
+					if armed && outcome == "identity before submit" && calls >= 5 {
+						current.ID = "replacement-owner"
+					}
+					if revoked {
+						return domain.Principal{}, domain.ErrNotPermitted
+					}
+					return current, nil
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				w := domain.Workflow{ID: "flow", Name: "Flow", Status: domain.WorkflowActive, Steps: []domain.WorkflowStep{{ID: "test", Name: "Test", Type: domain.StepTypeTool, Capability: "code.test"}}}
+				req := coordinator.RunWorkflowRequest{Key: "run", WorkflowID: w.ID, Revision: strings.Repeat("a", 40)}
+				failed := errors.New("source unavailable")
+				source := workflowSource(func(context.Context, domain.ProjectKey, string, string) (domain.Workflow, error) {
+					if armed {
+						switch outcome {
+						case "identity changed", "source error and changed identity":
+							current.ID = "replacement-owner"
+						case "revoked", "source error and revoked":
+							revoked = true
+						case "canceled":
+							cancel()
+						}
+						if strings.HasPrefix(outcome, "source error") {
+							return w, failed
+						}
+					}
+					return w, nil
+				})
+				if operation == "replay" {
+					if _, replay, err := api.RunWorkflow(ctx, project, req, source); err != nil || replay {
+						t.Fatalf("seed: %v %v", replay, err)
+					}
+				}
+				commands, commits := store.commands.Load(), store.commits.Load()
+				calls, armed = 0, true
+				var got, zero any
+				replay := false
+				if operation == "read" {
+					got, err = api.Workflow(ctx, project, req.WorkflowID, req.Revision, source)
+					zero = domain.Workflow{}
+				} else {
+					var out coordinator.Submitted
+					out, replay, err = api.RunWorkflow(ctx, project, req, source)
+					got, zero = out, coordinator.Submitted{}
+					if outcome == "authorized" && out.Execution.RequestedBy != owner {
+						t.Fatalf("actor: %+v", out.Execution.RequestedBy)
+					}
+				}
+				if outcome == "authorized" {
+					if err != nil || reflect.DeepEqual(got, zero) || replay != (operation == "replay") {
+						t.Fatalf("positive control: %+v %v replay=%v", got, err, replay)
+					}
+					return
+				}
+				want := domain.ErrNotPermitted
+				if outcome == "canceled" {
+					want = context.Canceled
+				}
+				if outcome == "source error" {
+					want = failed
+				}
+				if !errors.Is(err, want) || !reflect.DeepEqual(got, zero) || replay {
+					t.Fatalf("want empty and %v; got %+v %v replay=%v", want, got, err, replay)
+				}
+				if store.commands.Load() != commands || store.commits.Load() != commits {
+					t.Fatal("denied operation reached command replay or mutation")
+				}
+			})
 		}
 	}
 }

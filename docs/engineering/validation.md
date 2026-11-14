@@ -168,3 +168,9 @@ covers the shared Project authorization helper retaining the pre-lookup human ID
 Its fake-backed read/Submit matrix checks replacement-identity denial before
 resource access or coordinator replay/mutation, original attribution, and error
 precedence. This is unit evidence, not a new HTTP/session or PostgreSQL run.
+
+
+The [Workflow identity record](../validation/m3/2026-11-14-linux-prj-002-workflow-identity.md)
+covers original-human binding across committed source loading and submission,
+including post-source error precedence and denial before replay or mutation.
+It is fake-backed unit evidence, not a public Workflow HTTP/SDK or PostgreSQL run.
