@@ -262,3 +262,23 @@ handlers: logout during the storage read withholds GET data and rejects PATCH
 before consuming its body or writing. A second live browser session retains
 access to the unchanged, isolated settings. Storage is fake and requests use
 in-process HTTP recorders; this is not a real browser or product-server run.
+
+## Authority loss during mutation resource IO
+
+`Cancel`, `DecideApproval`, `ResumeStep` and `AbandonStep` refresh Project
+authorization after successful resource ownership reads and before handing the
+command to the coordinator. Approval decisions cover both the Approval read and
+its gating Execution read. A revoked session, cancelled request or authenticated
+human ID that differs from the pre-read identity is refused with an empty outcome
+and no replay. Successful commands retain the original authenticated actor;
+request-body actors confer no authority.
+
+Resource errors retain precedence: storage failures propagate, and missing or
+foreign resources still return `domain.ErrNotFound` before any coordinator replay
+lookup or mutation. This additional check is **not atomic with the database
+commit**; authority may change after the check or during coordinator IO. No
+transaction, contract, public route or Work command scope changes.
+
+The [Linux mutation resource IO record](../validation/m3/2026-11-14-linux-prj-002-mutation-session-io.md)
+records deterministic fake-backed tests and their limits. ADR-0070 remains
+proposed and untouched; full #191/#18/M3 acceptance remains open.

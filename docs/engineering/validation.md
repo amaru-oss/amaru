@@ -154,3 +154,10 @@ The [Worker process-channel record](../validation/m3/2026-11-14-linux-obs-001-wo
 The [Project query authority record](../validation/m3/2026-11-14-linux-prj-002-read-authority.md) covers revocation/cancellation during existing query IO, zero results on read failure, and the #401 exact-head proposal review/merge. It does not implement a public Evidence route or complete #191/M3 acceptance.
 
 The [settings session IO record](../validation/m3/2026-11-14-linux-prj-002-settings-session-io.md) covers actual session logout during the settings-store read through the HTTP handler, refusal before PATCH body consumption, and continued access by a second session. These are deterministic integration tests with fake storage, not browser, PostgreSQL or full #191 acceptance.
+
+The [mutation resource IO record](../validation/m3/2026-11-14-linux-prj-002-mutation-session-io.md)
+covers `ProjectAccess` Cancel, Approval decision, ResumeStep and AbandonStep
+checks after blocking ownership reads. Its deterministic matrix includes fresh
+mutations, replay, revocation, cancellation, changed human identity and preserved
+storage/missing/foreign errors. These are fake-backed unit tests, without an
+atomic authorization/commit guarantee or new public mutation routes.
