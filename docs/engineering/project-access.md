@@ -255,3 +255,10 @@ the final authority check and response delivery, and does not change mutation
 transaction semantics. It adds no public Evidence route, snapshot authorization
 or wire contract; ADR-0071 is outside this #18 slice. Product/Provider, Work and
 secret-delivery acceptance remain open under #191/#18/M3.
+
+The [HTTP session read record](../validation/m3/2026-11-14-linux-prj-002-settings-session-io.md)
+adds integration evidence with the actual authentication/session and settings
+handlers: logout during the storage read withholds GET data and rejects PATCH
+before consuming its body or writing. A second live browser session retains
+access to the unchanged, isolated settings. Storage is fake and requests use
+in-process HTTP recorders; this is not a real browser or product-server run.
