@@ -93,13 +93,41 @@ func evidenceInput(t *testing.T) ExecutionEvidenceInput {
 		Events:    []ExecutionEvent{{ExecutionID: "e1", Seq: 1, Kind: EventStepLeased, StepID: "e1.a", At: at}},
 		Approvals: []Approval{ap},
 		Audit:     []AuditEvent{{Seq: 3, At: at, Kind: AuditApprovalRequested, Actor: "u1", ActorKind: ActorHuman, TargetType: "approval", TargetID: "e1.a"}},
-		Contexts:  []StepContext{{ExecutionID: "e1", StepID: "e1.a", Format: "amaru-context/1", Hash: "h", Document: "doc", CreatedAt: at}},
+		Contexts:  []StepContext{{ExecutionID: "e1", StepID: "e1.a", Format: ContextFormat, Hash: ContentHash([]byte("doc")), Document: "doc", CreatedAt: at}},
 		Artifacts: []ArtifactVersion{
 			{ArtifactID: "z", Version: 1, ExecutionID: "e1", StepID: "e1.a"},
 			{ArtifactID: "a", Version: 2, ExecutionID: "e1", StepID: "e1.a"},
 			{ArtifactID: "a", Version: 1, ExecutionID: "e1", StepID: "e1.a"},
 			{ArtifactID: "m", Version: 1, ExecutionID: "e1", StepID: "e1.b"},
 		},
+	}
+}
+
+func TestExecutionEvidenceValidatesContext(t *testing.T) {
+	for _, damage := range []string{"none", "hash", "document", "format", "timestamp"} {
+		t.Run(damage, func(t *testing.T) {
+			in := evidenceInput(t)
+			c := &in.Contexts[0]
+			switch damage {
+			case "hash":
+				c.Hash = ContentHash([]byte("different content"))
+			case "document":
+				c.Document = ""
+				c.Hash = ContentHash(nil)
+			case "format":
+				c.Format = "unknown"
+			case "timestamp":
+				c.CreatedAt = time.Time{}
+			}
+			b, err := BuildExecutionEvidence(in)
+			if damage == "none" {
+				if err != nil || !reflect.DeepEqual(b.Steps[0].Context, c) {
+					t.Fatalf("valid context changed: %+v, %v", b, err)
+				}
+			} else if !errors.Is(err, ErrInvalid) || !reflect.DeepEqual(b, ExecutionEvidence{}) {
+				t.Fatalf("damaged context returned Evidence: %+v, %v", b, err)
+			}
+		})
 	}
 }
 
@@ -250,8 +278,11 @@ func TestBuildExecutionEvidenceDigestIsStableAndSeesEveryPart(t *testing.T) {
 		"event":     func(in *ExecutionEvidenceInput) { in.Events[0].Reason = "x" },
 		"approval":  func(in *ExecutionEvidenceInput) { in.Approvals[0].VoidReason = "x" },
 		"audit":     func(in *ExecutionEvidenceInput) { in.Audit[0].Reason = "x" },
-		"context":   func(in *ExecutionEvidenceInput) { in.Contexts[0].Document = "other" },
-		"artifact":  func(in *ExecutionEvidenceInput) { in.Artifacts[0].Hash = "sha256:x" },
+		"context": func(in *ExecutionEvidenceInput) {
+			in.Contexts[0].Document = "other"
+			in.Contexts[0].Hash = ContentHash([]byte(in.Contexts[0].Document))
+		},
+		"artifact": func(in *ExecutionEvidenceInput) { in.Artifacts[0].Hash = "sha256:x" },
 	} {
 		in := evidenceInput(t)
 		edit(&in)
