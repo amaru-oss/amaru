@@ -140,3 +140,11 @@ The actual Platform `Lifecycle` diagnostic queue/logger composition has
 trusted drain identity, omitted raw failure data, preserved failure/admission
 behavior and post-join queue drain, including nil/full queues. This test-only
 coverage does not establish a running product bootstrap or complete OBS-001.
+
+The [HTTP/Lifecycle diagnostic composition record](../validation/m3/2026-11-14-linux-obs-001-http-lifecycle-capture.md)
+extends the real loopback/Auth/discovery/Project settings test with JSON parsing,
+trusted per-request correlation, rejected-request fixtures and post-join Lifecycle
+queue drain through the same logger. Run
+`go test -race -count=1 -run '^TestHTTPDiscoveryAdmissionAndProductAuthentication$' ./internal/platform`
+from `services/platform`. This is fake-storage component integration; production
+entrypoint/consumer ownership and complete process-channel capture remain open.
