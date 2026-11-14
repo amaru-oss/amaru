@@ -91,3 +91,7 @@ func TestEveryCommandIdempotent(t *testing.T) {
 }
 
 func TestUsageCapture(t *testing.T) { coordtest.UsageSuite(t, newFake) }
+
+func TestMultiStepEvidenceWalkthrough(t *testing.T) {
+	coordtest.EvidenceWalkthrough(t, newSkillStores, func(*testing.T) (ports.PlatformLink, ports.WorkerLink) { return inproc.Pair() })
+}
