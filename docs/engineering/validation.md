@@ -114,3 +114,5 @@ The [Step-identity validation record](../validation/m3/2026-11-14-linux-art-002-
 The [internal multi-Step walkthrough record](../validation/m3/2026-11-14-linux-art-002-multi-step-walkthrough.md) covers Coordinator/store/Reader composition with fake Worker results, context, explicit Artifact ingest, Approval/Audit, Usage, ordered Events and an explicitly cancelled terminal bundle. It records the #19 base's missing normal Execution completion, absent gated-Step context and remaining recorder gaps. It does not complete #124 or the parent #19 audit chain.
 
 The [Artifact replay conflict record](../validation/m3/2026-11-14-linux-art-002-artifact-replay.md) covers fake/PostgreSQL capture-key replay rejection and changed-byte ingester retries with fake/filesystem blobs. It preserves original versions and exact replays; full ART-002 acceptance remains open.
+
+The [bundle ownership record](../validation/m3/2026-11-14-linux-art-002-bundle-ownership.md) covers isolation of the assembled, hashed Evidence from later changes to its input records. It does not make the returned Go value immutable or complete ART-002 acceptance.
