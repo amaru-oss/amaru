@@ -148,3 +148,5 @@ queue drain through the same logger. Run
 `go test -race -count=1 -run '^TestHTTPDiscoveryAdmissionAndProductAuthentication$' ./internal/platform`
 from `services/platform`. This is fake-storage component integration; production
 entrypoint/consumer ownership and complete process-channel capture remain open.
+
+The [Worker process-channel record](../validation/m3/2026-11-14-linux-obs-001-worker-channels.md) covers actual Lifecycle/Coordinator/session/Worker composition in child processes with fake storage/Provider, terminal state checks and stdout/stderr secret-fixture capture for success, failure, panic and explicit cancellation. It runs in `make check`; the child helper skips in the parent and executes once per scenario. This is integration evidence, not production startup or a real Provider run.
