@@ -133,3 +133,5 @@ The [context integrity record](../validation/m3/2026-11-14-linux-art-002-context
 covers rejection of damaged recorded Step contexts during internal Evidence assembly
 and Reader error propagation. It does not establish context authenticity, item-level
 integrity, public access or complete ART-002 acceptance.
+
+The [timeout Usage validation record](../validation/m3/2026-11-14-linux-art-002-timeout-usage.md) covers Worker-reported timeout capture/replay and refusal of late enrichment after a Platform-settled timeout. This is shared fake/PostgreSQL acceptance evidence for existing behavior, not full ART-002 acceptance.

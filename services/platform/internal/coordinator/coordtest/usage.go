@@ -19,9 +19,24 @@ import (
 // UsageSuite exercises identical delivery and restart cases on both adapters.
 func UsageSuite(t *testing.T, factory func(*testing.T) ports.ExecutionStore) {
 	ctx := context.Background()
-	for _, outcome := range []ports.ResultOutcome{ports.OutcomeSucceeded, ports.OutcomeFailed, ports.OutcomeCancelled} {
-		for _, faultAt := range []string{"none", "before", "after", "empty", "stale", "concurrent", "invalid", "multiple", "multiple_before", "multiple_after"} {
-			t.Run(map[ports.ResultOutcome]string{1: "success", 2: "failure", 3: "cancel"}[outcome]+"/"+faultAt, func(t *testing.T) {
+	for _, result := range []struct {
+		name      string
+		outcome   ports.ResultOutcome
+		errorCode string
+		state     domain.StepState
+		event     string
+	}{
+		{"success", ports.OutcomeSucceeded, "runner_failed", domain.StepSucceeded, domain.EventStepSucceeded},
+		{"failure", ports.OutcomeFailed, "runner_failed", domain.StepFailed, domain.EventStepFailed},
+		{"cancel", ports.OutcomeCancelled, "runner_failed", domain.StepCancelled, domain.EventStepCancelled},
+		{"timeout", ports.OutcomeFailed, domain.CodeTimeout, domain.StepTimedOut, domain.EventStepTimedOut},
+	} {
+		faults := []string{"none", "before", "after", "empty", "stale", "concurrent", "invalid", "multiple", "multiple_before", "multiple_after"}
+		if result.name == "timeout" {
+			faults = append(faults, "platform_settled")
+		}
+		for _, faultAt := range faults {
+			t.Run(result.name+"/"+faultAt, func(t *testing.T) {
 				s := factory(t)
 				e := domain.Execution{ID: "e1", ProjectID: "p1", EnvironmentID: "env1", State: domain.ExecQueued, CreatedAt: t0, RequestedBy: Requester, Trigger: domain.TriggerManual}
 				e, steps, err := s.Create(ctx, e, []domain.StepExecution{{ID: "s1", ExecutionID: "e1", State: domain.StepQueued}})
@@ -42,7 +57,7 @@ func UsageSuite(t *testing.T, factory func(*testing.T) ports.ExecutionStore) {
 					t.Fatal(err)
 				}
 				zero := uint64(0)
-				m := ports.Result{AttemptID: "att-1", FencingToken: 1, Outcome: outcome, ErrorCode: "runner_failed", ErrorDetail: "token=abcdefghijk", Usage: []ports.UsageReport{{Provider: "fake", Model: "token=abcdefghijk", InputTokens: &ports.IntMeasurement{Source: ports.UsageReported, Value: &zero}, OutputTokens: &ports.IntMeasurement{Source: ports.UsageUnknown}, Cost: &ports.Cost{Source: ports.UsageEstimated, Amount: "0.001230", Currency: "USD", PriceTableVersion: "v1"}}}}
+				m := ports.Result{AttemptID: "att-1", FencingToken: 1, Outcome: result.outcome, ErrorCode: result.errorCode, ErrorDetail: "token=abcdefghijk", Usage: []ports.UsageReport{{Provider: "fake", Model: "token=abcdefghijk", InputTokens: &ports.IntMeasurement{Source: ports.UsageReported, Value: &zero}, OutputTokens: &ports.IntMeasurement{Source: ports.UsageUnknown}, Cost: &ports.Cost{Source: ports.UsageEstimated, Amount: "0.001230", Currency: "USD", PriceTableVersion: "v1"}}}}
 				multiple := strings.HasPrefix(faultAt, "multiple")
 				boundary := strings.TrimPrefix(faultAt, "multiple_")
 				if multiple {
@@ -81,6 +96,29 @@ func UsageSuite(t *testing.T, factory func(*testing.T) ports.ExecutionStore) {
 					if wantErr != nil && acks != 0 || wantErr == nil && acks != 1 {
 						t.Fatalf("acks=%d", acks)
 					}
+				}
+				if faultAt == "platform_settled" {
+					st := readStep(t, s)
+					if err := st.TimeOut(t0); err != nil {
+						t.Fatal(err)
+					}
+					if _, err := s.Commit(ctx, ports.ExecutionChange{Steps: []domain.StepExecution{st}, Events: []domain.ExecutionEvent{{Kind: domain.EventStepTimedOut, StepID: st.ID, At: t0}}}); err != nil {
+						t.Fatal(err)
+					}
+					reader := evidence.Reader{Executions: s, Contexts: fakes.NewContextStore(), Artifacts: fakes.NewArtifactIndex()}
+					before, err := reader.Bundle(ctx, "e1")
+					if err != nil {
+						t.Fatal(err)
+					}
+					deliver(s, m, ports.ResultRejectedStale, nil)
+					if _, err := s.ResultCapture(ctx, m.AttemptID); !errors.Is(err, domain.ErrNotFound) {
+						t.Fatalf("late timeout result captured: %v", err)
+					}
+					after, err := reader.Bundle(ctx, "e1")
+					if err != nil || after.Digest != before.Digest || after.Steps[0].UsageGap == "" || len(after.Steps[0].Usage) != 0 {
+						t.Fatalf("late result changed Platform-settled timeout evidence: %v", err)
+					}
+					return
 				}
 				if faultAt == "invalid" {
 					m.Usage[0].InputTokens = &ports.IntMeasurement{Source: ports.UsageUnknown, Value: &zero}
@@ -173,6 +211,12 @@ func UsageSuite(t *testing.T, factory func(*testing.T) ports.ExecutionStore) {
 					t.Fatal(err)
 				}
 				events := readEvents(t, s)
+				if st := readStep(t, s); st.State != result.state || len(events) != 1 || events[0].Kind != result.event {
+					t.Fatalf("completion state=%s events=%v", st.State, events)
+				}
+				if result.name == "timeout" && (before.Steps[0].Error == nil || before.Steps[0].Error.Code != domain.CodeTimeout || before.Steps[0].Error.Message != "token=[REDACTED]") {
+					t.Fatal("timeout evidence lost error code/redaction")
+				}
 				deliver(s, m, ports.ResultDuplicate, nil)
 				next, _ := s.UsageCaptures(ctx, "e1")
 				if !reflect.DeepEqual(cs, next) || !reflect.DeepEqual(events, readEvents(t, s)) {
@@ -183,7 +227,7 @@ func UsageSuite(t *testing.T, factory func(*testing.T) ports.ExecutionStore) {
 				deliver(s, conflict, 0, domain.ErrInvalid)
 				conflict = m
 				conflict.Outcome = ports.OutcomeFailed
-				if outcome == ports.OutcomeFailed {
+				if result.outcome == ports.OutcomeFailed {
 					conflict.Outcome = ports.OutcomeSucceeded
 				}
 				deliver(s, conflict, 0, domain.ErrInvalid)
