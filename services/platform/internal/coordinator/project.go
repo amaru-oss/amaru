@@ -101,7 +101,7 @@ func (a *ProjectAccess) Submit(ctx context.Context, project domain.ProjectKey, r
 	return a.coordinator.Submit(ctx, req)
 }
 
-// Cancel checks ownership before the coordinator can read a recorded outcome or mutate state.
+// Cancel checks ownership and refreshes authority before coordinator replay or mutation.
 func (a *ProjectAccess) Cancel(ctx context.Context, project domain.ProjectKey, req CancelRequest) (Cancelled, bool, error) {
 	by, err := a.authorize(ctx, project)
 	if err != nil {
@@ -109,6 +109,13 @@ func (a *ProjectAccess) Cancel(ctx context.Context, project domain.ProjectKey, r
 	}
 	if _, _, err := a.execution(ctx, project, req.ExecutionID); err != nil {
 		return Cancelled{}, false, err
+	}
+	current, err := a.authorize(ctx, project)
+	if err != nil {
+		return Cancelled{}, false, err
+	}
+	if current.ID != by.ID {
+		return Cancelled{}, false, domain.ErrNotPermitted
 	}
 	req.By, req.ActorID = domain.Actor{Kind: domain.ActorHuman}, by.ID
 	return a.coordinator.Cancel(ctx, req)
@@ -152,6 +159,13 @@ func (a *ProjectAccess) DecideApproval(ctx context.Context, project domain.Proje
 	}
 	if _, err := a.approval(ctx, project, req.ApprovalID); err != nil {
 		return Decided{}, false, err
+	}
+	current, err := a.authorize(ctx, project)
+	if err != nil {
+		return Decided{}, false, err
+	}
+	if current.ID != by.ID {
+		return Decided{}, false, domain.ErrNotPermitted
 	}
 	req.By = by
 	return a.coordinator.DecideApproval(ctx, req)
@@ -212,7 +226,7 @@ func (a *ProjectAccess) Events(ctx context.Context, q domain.EventQuery, stream 
 	return page, nil
 }
 
-// ResumeStep rechecks Project ownership before command replay or a human transition.
+// ResumeStep checks ownership and refreshes authority before replay or a human transition.
 func (a *ProjectAccess) ResumeStep(ctx context.Context, project domain.ProjectKey, req HumanStepRequest) (domain.StepExecution, bool, error) {
 	by, err := a.authorize(ctx, project)
 	if err != nil {
@@ -221,11 +235,18 @@ func (a *ProjectAccess) ResumeStep(ctx context.Context, project domain.ProjectKe
 	if _, _, err := a.execution(ctx, project, req.ExecutionID); err != nil {
 		return domain.StepExecution{}, false, err
 	}
+	current, err := a.authorize(ctx, project)
+	if err != nil {
+		return domain.StepExecution{}, false, err
+	}
+	if current.ID != by.ID {
+		return domain.StepExecution{}, false, domain.ErrNotPermitted
+	}
 	req.By, req.ActorID = domain.Actor{Kind: domain.ActorHuman}, by.ID
 	return a.coordinator.ResumeStep(ctx, req)
 }
 
-// AbandonStep rechecks Project ownership before command replay or a human transition.
+// AbandonStep checks ownership and refreshes authority before replay or a human transition.
 func (a *ProjectAccess) AbandonStep(ctx context.Context, project domain.ProjectKey, req HumanStepRequest) (domain.StepExecution, bool, error) {
 	by, err := a.authorize(ctx, project)
 	if err != nil {
@@ -233,6 +254,13 @@ func (a *ProjectAccess) AbandonStep(ctx context.Context, project domain.ProjectK
 	}
 	if _, _, err := a.execution(ctx, project, req.ExecutionID); err != nil {
 		return domain.StepExecution{}, false, err
+	}
+	current, err := a.authorize(ctx, project)
+	if err != nil {
+		return domain.StepExecution{}, false, err
+	}
+	if current.ID != by.ID {
+		return domain.StepExecution{}, false, domain.ErrNotPermitted
 	}
 	req.By, req.ActorID = domain.Actor{Kind: domain.ActorHuman}, by.ID
 	return a.coordinator.AbandonStep(ctx, req)
