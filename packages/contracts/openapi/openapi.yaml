@@ -22,6 +22,7 @@ paths:
     get:
       operationId: getHealth
       summary: Liveness + versions. Unauthenticated, Host-checked health probe.
+      description: Before aggregate readiness or during shutdown, admission returns 503 with the existing internal Error envelope; no healthy metadata is advertised.
       security: []
       responses:
         '200':
@@ -30,6 +31,8 @@ paths:
             application/json:
               schema:
                 $ref: ../schemas/Health.json
+        default:
+          $ref: '#/components/responses/Error'
   /auth/launch-codes:
     post:
       operationId: createLaunchCode

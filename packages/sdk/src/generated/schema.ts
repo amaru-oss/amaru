@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Liveness + versions. Unauthenticated, Host-checked health probe. */
+        /**
+         * Liveness + versions. Unauthenticated, Host-checked health probe.
+         * @description Before aggregate readiness or during shutdown, admission returns 503 with the existing internal Error envelope; no healthy metadata is advertised.
+         */
         get: operations["getHealth"];
         put?: never;
         post?: never;
@@ -664,6 +667,19 @@ export interface components {
         };
         StreamFrame: components["schemas"]["Frame"];
         /**
+         * ErrorCode
+         * @enum {unknown}
+         */
+        ErrorCode: "invalid_request" | "unauthorized" | "forbidden_origin" | "forbidden" | "not_found" | "provider_unavailable" | "protocol_mismatch" | "conflict" | "rate_limited" | "needs_grant" | "internal";
+        /** Error */
+        Error: {
+            error: {
+                code: components["schemas"]["ErrorCode"];
+                message: string;
+                details?: Record<string, never>;
+            };
+        };
+        /**
          * ProtocolVersion
          * @constant
          */
@@ -681,19 +697,6 @@ export interface components {
             protocolVersion: components["schemas"]["ProtocolVersion"];
             startedAt: components["schemas"]["Timestamp"];
             uptimeSec: number;
-        };
-        /**
-         * ErrorCode
-         * @enum {unknown}
-         */
-        ErrorCode: "invalid_request" | "unauthorized" | "forbidden_origin" | "forbidden" | "not_found" | "provider_unavailable" | "protocol_mismatch" | "conflict" | "rate_limited" | "needs_grant" | "internal";
-        /** Error */
-        Error: {
-            error: {
-                code: components["schemas"]["ErrorCode"];
-                message: string;
-                details?: Record<string, never>;
-            };
         };
         /** Project */
         Project: {
@@ -2256,6 +2259,7 @@ export interface operations {
                     "application/json": components["schemas"]["Health"];
                 };
             };
+            default: components["responses"]["Error"];
         };
     };
     createLaunchCode: {
