@@ -98,10 +98,10 @@ type ExecutionEvidenceInput struct {
 }
 
 // BuildExecutionEvidence assembles the bundle. It returns ErrInvalid when a part belongs to
-// another Execution or Step, Step/context identities are ambiguous, or a pinned definition is
-// damaged. Steps keep their creation order, Approvals their request order and the logs their
-// Seq order; Artifacts are grouped under their
-// Step. The returned bundle owns its contents; later input edits cannot invalidate its Digest.
+// another Execution or Step, Step/context identities are ambiguous, or a pinned definition or
+// recorded context is damaged. Steps keep their creation order, Approvals their request order and
+// the logs their Seq order; Artifacts are grouped under their Step. The returned bundle owns its
+// contents; later input edits cannot invalidate its Digest.
 func BuildExecutionEvidence(in ExecutionEvidenceInput) (ExecutionEvidence, error) {
 	id := in.Execution.ID
 	if id == "" {
@@ -182,6 +182,9 @@ func BuildExecutionEvidence(in ExecutionEvidenceInput) (ExecutionEvidence, error
 		}
 		if out.Steps[i].Context != nil {
 			return ExecutionEvidence{}, invalid("evidence: duplicate context for step %s", c.StepID)
+		}
+		if err := c.Validate(); err != nil {
+			return ExecutionEvidence{}, fmt.Errorf("evidence: recorded context: %w", err)
 		}
 		c := c
 		out.Steps[i].Context = &c

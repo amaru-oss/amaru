@@ -128,3 +128,8 @@ The [definition integrity record](../validation/m3/2026-11-14-linux-art-002-defi
 covers rejection of damaged pinned Workflow definitions during internal Evidence
 assembly and Reader error propagation. It does not establish definition
 authenticity, public API access or complete ART-002 acceptance.
+
+The [context integrity record](../validation/m3/2026-11-14-linux-art-002-context-integrity.md)
+covers rejection of damaged recorded Step contexts during internal Evidence assembly
+and Reader error propagation. It does not establish context authenticity, item-level
+integrity, public access or complete ART-002 acceptance.

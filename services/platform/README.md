@@ -119,3 +119,9 @@ or an invalid Workflow snapshot, returns `domain.ErrInvalid` and no bundle.
 Executions submitted without a Workflow still have no pin. This checks recorded
 definition integrity; it does not establish authenticity, public access or full
 Evidence completeness. See the [definition integrity record](../../docs/validation/m3/2026-11-14-linux-art-002-definition-integrity.md).
+
+Recorded Step contexts also pass their existing validator before Evidence assembly:
+invalid document hashes, formats, sizes or missing timestamps return `domain.ErrInvalid`
+and no bundle. Absent contexts remain explicit gaps. This checks recorded document
+integrity, not authenticity or the correspondence of each context item to the document.
+See the [context integrity record](../../docs/validation/m3/2026-11-14-linux-art-002-context-integrity.md).

@@ -133,6 +133,19 @@ func TestBundleStoreFailureReturnsNoPartialEvidence(t *testing.T) {
 	}
 }
 
+func TestBundleRejectsDamagedContext(t *testing.T) {
+	r, _ := readerFixture()
+	r.Contexts = contextRead{get: func(e, st string) (domain.StepContext, error) {
+		if st != "s1" {
+			return domain.StepContext{}, domain.ErrNotFound
+		}
+		return domain.StepContext{ExecutionID: e, StepID: st, Format: domain.ContextFormat,
+			Document: "damaged", Hash: domain.ContentHash([]byte("original")), CreatedAt: time.Now()}, nil
+	}}
+	b, err := r.Bundle(context.Background(), "e1")
+	assertNoBundle(t, b, err, domain.ErrInvalid)
+}
+
 func TestBundleRejectsDamagedDefinition(t *testing.T) {
 	r, s := readerFixture()
 	s.definition = &domain.DefinitionPin{WorkflowID: "ship-it", Hash: domain.ContentHash([]byte("original")), Snapshot: []byte(`{"id":"ship-it"}`)}
