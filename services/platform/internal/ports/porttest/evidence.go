@@ -31,6 +31,12 @@ func ExecutionEvidence(t *testing.T, newStores func(t *testing.T) EvidenceStores
 	run := func(t *testing.T, s EvidenceStores, id string) {
 		t.Helper()
 		e, steps := newExec(id, id+".a", id+".b")
+		pin, err := domain.Pin(domain.Workflow{ID: "ship-it", Name: "Ship it", Status: domain.WorkflowActive,
+			Steps: []domain.WorkflowStep{{ID: "build", Name: "Build", Type: domain.StepTypeTool, Capability: "code.build"}}}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.Definition = &pin
 		if err := steps[1].RequireApproval(); err != nil {
 			t.Fatal(err)
 		}
@@ -62,6 +68,12 @@ func ExecutionEvidence(t *testing.T, newStores func(t *testing.T) EvidenceStores
 		}
 		if b.Execution.ID != "e1" || len(b.Steps) != 2 || b.Steps[0].ID != "e1.a" || b.Steps[1].ID != "e1.b" {
 			t.Fatalf("execution and steps: %+v", b)
+		}
+		if b.Execution.Definition == nil {
+			t.Fatal("pinned definition missing")
+		}
+		if w, err := b.Execution.Definition.Workflow(); err != nil || w.ID != "ship-it" {
+			t.Fatalf("pinned definition did not survive storage and Evidence assembly: %+v, %v", w, err)
 		}
 		if b.Steps[0].Context == nil || b.Steps[0].Context.Document == "" || b.Steps[1].Context != nil {
 			t.Errorf("context belongs to the first Step only: %+v / %+v", b.Steps[0].Context, b.Steps[1].Context)
