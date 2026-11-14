@@ -103,6 +103,8 @@ Amaru records significant decisions as Architecture Decision Records (ADRs) in [
 
 | [0068](adr/0068-platform-process-readiness-and-bounded-shutdown.md) | Gate Platform process readiness and bound shutdown with one lifecycle owner | accepted | 2026-11-13 |
 
+| [0070](adr/0070-project-scoped-work-command-contract.md) | Define Project-scoped Work ownership, keys, reopening and command concurrency | proposed | 2026-11-14 |
+
 ADRs 0002–0005 and 0008–0039 were accepted by the product owner on 2026-10-25 in the planning session that closed every question in [OPEN_QUESTIONS](OPEN_QUESTIONS.md). Where the owner delegated a question ("you can decide"), the ADR's Approval section says so. ADRs 0040–0043 were accepted the same day under the owner's delegation in a second planning pass that closed the residual questions Q23–Q54; they supersede 0020, 0019, 0014 and 0027 respectively, which stay in the log as `superseded`. ADRs 0044 and 0045 were drafted by an agent from the WP-M1-02 spike and accepted by the product owner on 2026-10-26.
 
 ## ADR backlog
@@ -112,3 +114,5 @@ ADRs 0002–0005 and 0008–0039 were accepted by the product owner on 2026-10-2
 ## Relationship to the prototype ADRs
 
 The earlier internal implementation has its own ADR-001…029 (two files numbered 009). They govern that codebase and are **not** Amaru decisions. They are evidence: an Amaru ADR that keeps, changes or drops a prototype decision cites it.
+
+Numbering check for ADR-0070 (2026-11-14): fetched origin and inspected all available M3 integration refs and main histories. ADR-0069 is already accepted on #19 at `b9662a8` ([canonical file](https://github.com/rluders/amaru/blob/b9662a8/docs/architecture/adr/0069-durable-evidence-capture-and-authorized-bundle-reads.md)); it is absent from this #18 base. No 0070 or higher was found before this draft. Reserve 0070 here; do not duplicate or renumber 0069. The index lists files present on this branch, so no dangling 0069 row is added. On integration with #19/main, retain both canonical ADR files and both matching rows; reconcile additive index text if Git reports a conflict.

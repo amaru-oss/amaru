@@ -4,6 +4,13 @@ Questions that block or shape decisions. Each is closed by an ADR ([DECISIONS](D
 
 ## Questions
 
+### Q68. Project-scoped Work contract and unresolved mappings
+
+- **Question:** approve the four Work contract choices and atomic ownership/dependency boundaries in [proposed ADR-0070](adr/0070-project-scoped-work-command-contract.md)?
+- **Evidence:** #191 comment on 2026-11-14 and source inspection at `159f38d` show optional create owner, unallocated display prefixes, no reopen-reason input/Event history, and no Work command keys/versions. The ADR links exact schemas/domain sources and maps follow-up surfaces.
+- **Open evidence gaps:** WorkOwner has no principal reference, so accountable human identity/reassignment cannot be inferred. Public workflowId/external/deliveryLoop fields exceed the current Work domain model; their validation, storage and command normalization need source-backed mapping before exposure, without silently dropping fields. The accepted start-only dependency rule requires a visible signal on prerequisite regression, but the exact typed Event mapping and recipient behavior remain unresolved. Do not invent wire fields for these gaps.
+- **Owner:** Ricardo Lüders. **Status:** open; ADR-0070 is proposed with empty deciders. Approving its four choices does not silently resolve these remaining mappings. No Work implementation, full #191/#18 acceptance or issue closure is claimed.
+
 ### Q66. Public Project inspection and unavailable clone responses
 
 - **Question:** how should authenticated attach/list/detail map required config/Git metadata when existing wire descriptions conflict with committed-definition placement and the current Git inspector, and how should an unavailable attached clone affect list/detail?
