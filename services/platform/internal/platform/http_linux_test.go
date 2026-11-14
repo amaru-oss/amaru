@@ -81,7 +81,8 @@ func httpCall(t *testing.T, info discovery.Info, method, path, body string, conf
 	if configure != nil {
 		configure(req)
 	}
-	client := &http.Client{Timeout: time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	// Each call owns one request; shared reuse can leave speculative StateNew dials.
+	client := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}, Timeout: time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal("loopback request failed")
@@ -92,7 +93,9 @@ func httpCall(t *testing.T, info discovery.Info, method, path, body string, conf
 
 func TestHTTPDiscoveryAdmissionAndProductAuthentication(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "state")
-	l, _ := NewLifecycle(time.Now().Add(3*time.Second), time.Second, nil)
+	queue := make(chan operational.Record, 128)
+	l, _ := NewLifecycle(time.Now().Add(3*time.Second), time.Second, queue)
+	productIdentity := make(chan operational.Identity, 16)
 	projects := fakes.NewProjectStore()
 	key := domain.ProjectKey("id:01ARZ3NDEKTSV4RRFFQ69G5FAV")
 	if err := projects.Create(context.Background(), domain.Project{Key: key, Name: "one", CreatedAt: time.Now()}); err != nil {
@@ -103,8 +106,16 @@ func TestHTTPDiscoveryAdmissionAndProductAuthentication(t *testing.T) {
 		if err != nil {
 			return nil, err
 		}
-		return httpapi.SettingsHandler(auth, access, projects)
+		handler, err := httpapi.SettingsHandler(auth, access, projects)
+		if err != nil {
+			return nil, err
+		}
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			productIdentity <- operational.IdentityFrom(r.Context())
+			handler.ServeHTTP(w, r)
+		}), nil
 	})
+	h.config.OnLogError = func(error) { t.Error("safe diagnostic write failed") }
 	gate := make(chan struct{})
 	cancel, done := startHTTP(t, h, dependent{ready: func(ctx context.Context) error {
 		select {
@@ -146,6 +157,15 @@ func TestHTTPDiscoveryAdmissionAndProductAuthentication(t *testing.T) {
 	resp = httpCall(t, info, "GET", path, "", nil)
 	if resp.StatusCode != 401 {
 		t.Fatal("missing credentials admitted")
+	}
+	resp.Body.Close()
+	resp = httpCall(t, info, "GET", path+"?credential=opaque-query-fixture", "opaque-body-fixture", func(r *http.Request) {
+		r.Header.Set("X-Correlation-ID", "untrusted-correlation-fixture")
+		r.Header.Set("Authorization", "Bearer opaque-bearer-fixture")
+		r.Header.Set("Cookie", "amaru_session=opaque-cookie-fixture")
+	})
+	if resp.StatusCode != 401 {
+		t.Fatal("fixture credentials admitted")
 	}
 	resp.Body.Close()
 	resp = httpCall(t, info, "GET", path, "", func(r *http.Request) { native(r); r.Host = "hostile.invalid" })
@@ -205,13 +225,89 @@ func TestHTTPDiscoveryAdmissionAndProductAuthentication(t *testing.T) {
 	if h.auth.AdministratorSecret() != "" {
 		t.Fatal("administrator credential retained")
 	}
-	for _, secret := range []string{info.AdministratorSecret, launch.Code, cookies[0].Value, session.CSRF} {
-		if secret != "" && strings.Contains(logs.String(), secret) {
-			t.Fatal("credential leaked to diagnostics")
+	// HTTP and Lane producers have joined; only this composition caller closes/drains.
+	close(queue)
+	trusted := operational.WithIdentity(context.Background(), operational.Identity{InstanceID: "test-instance", CorrelationID: "trusted-lifecycle"})
+	lifecycleCount := 0
+	for record := range queue {
+		lifecycleCount++
+		if err := h.config.Logger.Write(trusted, record); err != nil {
+			t.Fatal("lifecycle diagnostic write failed")
 		}
 	}
-	if !strings.Contains(logs.String(), `"operation":"http.request"`) {
-		t.Fatal("safe HTTP diagnostics absent")
+	if lifecycleCount == 0 || lifecycleCount == cap(queue) {
+		t.Fatal("missing lifecycle diagnostics or insufficient queue capacity")
+	}
+	for _, secret := range []string{info.AdministratorSecret, launch.Code, cookies[0].Value, session.CSRF,
+		"opaque-query-fixture", "opaque-body-fixture", "opaque-bearer-fixture", "opaque-cookie-fixture", "untrusted-correlation-fixture"} {
+		if secret == "" || strings.Contains(logs.String(), secret) {
+			t.Fatal("empty fixture or credential/untrusted request data leaked to diagnostics")
+		}
+	}
+	var identity operational.Identity
+	select {
+	case identity = <-productIdentity:
+	default:
+		t.Fatal("successful mutation did not reach the product handler")
+	}
+	if len(productIdentity) != 0 || identity.InstanceID != "test-instance" || identity.CorrelationID == "" {
+		t.Fatal("rejected requests reached product or product identity missing")
+	}
+	statuses := map[int]int{503: 1, 401: 3, 403: 1, 201: 1, 303: 1, 200: 3}
+	seen := map[string]bool{}
+	matchedProduct := false
+	for _, line := range bytes.Split(bytes.TrimSpace(logs.Bytes()), []byte("\n")) {
+		var record map[string]any
+		if json.Unmarshal(line, &record) != nil || record["instanceId"] != "test-instance" {
+			t.Fatal("invalid JSON or missing trusted Instance identity")
+		}
+		timestamp, ok := record["time"].(string)
+		if !ok {
+			t.Fatal("missing diagnostic timestamp")
+		}
+		if _, err := time.Parse(time.RFC3339Nano, timestamp); err != nil {
+			t.Fatal("invalid diagnostic timestamp")
+		}
+		if record["operation"] == "process.lifecycle" {
+			if len(record) != 5 || record["correlationId"] != "trusted-lifecycle" {
+				t.Fatal("lifecycle record contains unexpected fields or identity")
+			}
+			switch record["outcome"] {
+			case "debug", "info", "warning":
+			default:
+				t.Fatal("unexpected failure on successful lifecycle cleanup")
+			}
+			lifecycleCount--
+			continue
+		}
+		correlation, ok := record["correlationId"].(string)
+		if len(record) != 6 || record["operation"] != "http.request" || !ok || correlation == "" || seen[correlation] || correlation == "trusted-lifecycle" {
+			t.Fatal("HTTP record has unexpected fields or missing/duplicate correlation")
+		}
+		seen[correlation] = true
+		status, ok := record["status"].(float64)
+		if !ok || statuses[int(status)] == 0 {
+			t.Fatal("unexpected HTTP diagnostic status")
+		}
+		statuses[int(status)]--
+		outcome := "succeeded"
+		if status >= 400 {
+			outcome = "rejected"
+		}
+		if record["outcome"] != outcome {
+			t.Fatal("HTTP diagnostic outcome disagrees with response")
+		}
+		if correlation == identity.CorrelationID {
+			matchedProduct = status == 200
+		}
+	}
+	for _, remaining := range statuses {
+		if remaining != 0 {
+			t.Fatal("missing HTTP diagnostic")
+		}
+	}
+	if !matchedProduct || lifecycleCount != 0 {
+		t.Fatal("product correlation or lifecycle records lost in shared sink")
 	}
 }
 
