@@ -145,7 +145,8 @@ func EvidenceWalkthrough(t *testing.T, newStores func(*testing.T) SkillStores, n
 		final.Steps[1].UsageGap != "accepted Worker result contains no usage reports; usage unknown" {
 		t.Fatal("reported zero, unknown measurement, precise cost or empty-result gap lost")
 	}
-	if !reflect.DeepEqual(final.Steps[0].Context, &assembled) || !reflect.DeepEqual(final.Steps[0].Skills, got.Steps[0].Skills) || final.Steps[1].Context != nil {
+	if !reflect.DeepEqual(final.Steps[0].Context, &assembled) || !reflect.DeepEqual(final.Steps[0].Skills, got.Steps[0].Skills) || final.Steps[1].Context != nil ||
+		final.Steps[0].ContextGap != "" || final.Steps[1].ContextGap == "" {
 		t.Fatal("context/Skill attribution lost or absent context fabricated")
 	}
 	if !reflect.DeepEqual(final.Steps[0].Artifacts, []domain.ArtifactVersion{versions[1], versions[0]}) || len(final.Steps[1].Artifacts) != 0 {
@@ -187,7 +188,7 @@ func EvidenceWalkthrough(t *testing.T, newStores func(*testing.T) SkillStores, n
 		}
 		gaps = append(gaps, gap.Kind)
 	}
-	if !slices.Equal(gaps, []string{domain.GapCheck, domain.GapDiff, domain.GapLog, domain.GapWorkspace, domain.GapUsage}) {
+	if !slices.Equal(gaps, []string{domain.GapCheck, domain.GapDiff, domain.GapLog, domain.GapWorkspace, domain.GapUsage, domain.GapContext}) {
 		t.Fatalf("explicit recorder gaps: %v", gaps)
 	}
 	s.send(result)

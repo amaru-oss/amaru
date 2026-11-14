@@ -9,17 +9,16 @@ import (
 	"time"
 )
 
-// EvidenceGap names a kind of Evidence the bundle cannot hold yet because the Platform records
-// none of it. A gap is listed, never left out, so a reader does not take its absence for "there
-// was nothing".
+// EvidenceGap names missing Evidence, including kinds with no recorder yet.
+// A gap is listed so a reader does not take absence for "there was nothing".
 type EvidenceGap struct {
 	Kind   string `json:"kind"`
 	Reason string `json:"reason"`
 }
 
-// Kinds of Evidence that FEAT-ART-002 names and the Platform does not record yet. Each is removed
-// from ExecutionEvidence.Gaps when its recorder lands.
+// Kinds of missing Evidence named by FEAT-ART-002.
 const (
+	GapContext   = "context"
 	GapDiff      = "diff"
 	GapLog       = "log"
 	GapCheck     = "check"
@@ -58,7 +57,8 @@ type StepEvidence struct {
 	Skills []SkillRef     `json:"skills,omitempty"`
 	Agent  *ResolvedAgent `json:"agent,omitempty"`
 	// Context is what the Agent was told; nil when the Platform assembled none for the Step.
-	Context *StepContext `json:"context,omitempty"`
+	Context    *StepContext `json:"context,omitempty"`
+	ContextGap string       `json:"contextGap,omitempty"`
 	// Artifacts are the versions the Step produced, ordered by Artifact id.
 	Artifacts []ArtifactVersion `json:"artifacts,omitempty"`
 }
@@ -77,7 +77,7 @@ type ExecutionEvidence struct {
 	// Final is true once the Execution is in a terminal state. A bundle read earlier is a view of
 	// a run still in progress.
 	Final bool `json:"final"`
-	// Gaps lists the Evidence kinds the Platform does not record yet.
+	// Gaps lists missing Evidence kinds, including kinds with no recorder yet.
 	Gaps []EvidenceGap `json:"gaps"`
 	// Digest is "sha256:" and the hash of the bundle's JSON with Digest empty.
 	Digest string `json:"digest"`
@@ -179,6 +179,16 @@ func BuildExecutionEvidence(in ExecutionEvidenceInput) (ExecutionEvidence, error
 		}
 		c := c
 		out.Steps[i].Context = &c
+	}
+	missingContext := false
+	for i := range out.Steps {
+		if out.Steps[i].Context == nil {
+			out.Steps[i].ContextGap = "no context recorded for this Step"
+			missingContext = true
+		}
+	}
+	if missingContext {
+		out.Gaps = append(out.Gaps, EvidenceGap{GapContext, "one or more Steps have no recorded context; see contextGap"})
 	}
 	for _, v := range in.Artifacts {
 		i, ok := steps[v.StepID]
