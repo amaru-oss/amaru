@@ -16,7 +16,14 @@ func (a *ProjectAccess) Settings(ctx context.Context, project domain.ProjectKey,
 	if store == nil {
 		return domain.ProjectSettings{}, domain.ErrInvalid
 	}
-	return store.Settings(ctx, project)
+	settings, err := store.Settings(ctx, project)
+	if err != nil {
+		return domain.ProjectSettings{}, err
+	}
+	if _, err := a.authorize(ctx, project); err != nil {
+		return domain.ProjectSettings{}, err
+	}
+	return settings, nil
 }
 
 // UpdateSettings is an unversioned partial update, not a replayable execution command.
