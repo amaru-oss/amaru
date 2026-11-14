@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -172,5 +173,41 @@ func TestBuildExecutionEvidenceAllowsExecutionAndStepEvents(t *testing.T) {
 	}
 	if got.Events[0].StepID != "" || got.Events[1].StepID != in.Steps[0].ID || got.Digest == "" {
 		t.Fatalf("events changed: %+v", got.Events)
+	}
+}
+
+func TestBuildExecutionEvidenceRejectsAmbiguousSteps(t *testing.T) {
+	for name, edit := range map[string]func(*ExecutionEvidenceInput){
+		"empty step id": func(in *ExecutionEvidenceInput) {
+			in.Steps = append(in.Steps, StepExecution{ExecutionID: in.Execution.ID})
+		},
+		"duplicate step": func(in *ExecutionEvidenceInput) {
+			in.Steps = append(in.Steps, in.Steps[0])
+		},
+		"conflicting step": func(in *ExecutionEvidenceInput) {
+			other := in.Steps[0]
+			other.State = StepFailed
+			in.Steps = append(in.Steps, other)
+		},
+		"duplicate context": func(in *ExecutionEvidenceInput) {
+			in.Contexts = append(in.Contexts, in.Contexts[0])
+		},
+		"conflicting context": func(in *ExecutionEvidenceInput) {
+			other := in.Contexts[0]
+			other.Document = "different context"
+			in.Contexts = append(in.Contexts, other)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			in := evidenceInput(t)
+			edit(&in)
+			b, err := BuildExecutionEvidence(in)
+			if !errors.Is(err, ErrInvalid) {
+				t.Fatalf("got %v, want ErrInvalid", err)
+			}
+			if !reflect.DeepEqual(b, ExecutionEvidence{}) {
+				t.Fatal("ambiguous attribution returned a partial bundle")
+			}
+		})
 	}
 }
