@@ -2,7 +2,7 @@
 
 [ADR-0062](../architecture/adr/0062-project-bound-public-operations-and-secret-resolution.md) is accepted following owner approval in [PR #330](https://github.com/rluders/amaru/pull/330). `coordinator.ProjectAccess` implements the first #191 application slice around existing Execution operations. It does not implement a product HTTP server or complete [#191](https://github.com/rluders/amaru/issues/191).
 
-Construct `NewProjectAccess` with the existing coordinator, the Instance's attached Project store and `localauth.Auth.Principal`. Every call rechecks authentication and attached Project identity. Compact composition has one configured Organization; its local administrator has owner access to those Projects. No membership database or multi-Organization authorization is implemented. The authentication callback is a trusted composition dependency, never a principal decoded from a request body or headers. A custom callback must enforce current authorization on every call.
+Construct `NewProjectAccess` with the existing coordinator, the Instance's attached Project store and `localauth.Auth.Principal`. Every call rechecks authentication and attached Project identity. The shared Project lookup retains the pre-IO human identity and refuses a replacement administrator before returning authority. Compact composition has one configured Organization; its local administrator has owner access to those Projects. No membership database or multi-Organization authorization is implemented. The authentication callback is a trusted composition dependency, never a principal decoded from a request body or headers. A custom callback must enforce current authorization on every call.
 
 `Auth.Principal` accepts only context established by that Auth instance's guarded downstream dispatch. Credential-free health/root requests and another Instance's context confer no identity. It refuses cancelled requests, logged-out/expired browser sessions and shutdown native contexts. Identity is the Instance-local `local-administrator`; session IDs and bearer values never become domain actor IDs. Origin/CSRF checks still precede authenticated dispatch.
 
@@ -282,3 +282,11 @@ transaction, contract, public route or Work command scope changes.
 The [Linux mutation resource IO record](../validation/m3/2026-11-14-linux-prj-002-mutation-session-io.md)
 records deterministic fake-backed tests and their limits. ADR-0070 remains
 proposed and untouched; full #191/#18/M3 acceptance remains open.
+
+
+The [Linux Project lookup identity record](../validation/m3/2026-11-14-linux-prj-002-lookup-identity.md)
+extends this guard to the Project lookup itself, before resource access or command
+attribution. Fake-backed tests reproduce replacement-identity reads and Submit,
+preserve storage/not-found error precedence, and check original-actor positive
+controls. This does not bind identity across every separate operation or make
+authorization atomic with response delivery or database commit.
