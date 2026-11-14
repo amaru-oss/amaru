@@ -69,7 +69,8 @@ PostgreSQL-tag vet is not PostgreSQL runtime validation.
 
 Evidence level: **unit-tested** with fake authentication and storage, including
 real coordinator mutation/replay logic. No actual logout/browser/HTTP route,
-PostgreSQL runtime, product process, real Provider, native macOS/Windows or full
-#191/#18/M3 acceptance is established by this slice. Existing actual-session
-settings evidence remains separate. No issue/Project status or ADR decision
-changes are made.
+PostgreSQL runtime, product process, real Provider or native macOS/Windows
+validation was performed for this slice. This is one bounded session-authority
+regression; #191, #18 and M3 remain open with independent acceptance gates.
+Existing actual-session settings evidence remains separate. No issue/Project
+status or ADR decision changes are made.
