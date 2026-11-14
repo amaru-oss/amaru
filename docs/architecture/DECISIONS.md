@@ -89,6 +89,7 @@ Amaru records significant decisions as Architecture Decision Records (ADRs) in [
 | [0058](adr/0058-command-idempotency-conflicts-and-retention.md) | Command idempotency rejects conflicting reuse and has no automatic expiry in M3 | accepted | 2026-11-12 |
 
 | [0069](adr/0069-durable-evidence-capture-and-authorized-bundle-reads.md) | Durable Evidence capture and authorized bundle reads | accepted | 2026-11-13 |
+| [0071](adr/0071-project-scoped-evidence-read-contract.md) | Project-scoped Evidence reads use a bounded metadata envelope | proposed | 2026-11-14 |
 
 ADRs 0002–0005 and 0008–0039 were accepted by the product owner on 2026-10-25 in the planning session that closed every question in [OPEN_QUESTIONS](OPEN_QUESTIONS.md). Where the owner delegated a question ("you can decide"), the ADR's Approval section says so. ADRs 0040–0043 were accepted the same day under the owner's delegation in a second planning pass that closed the residual questions Q23–Q54; they supersede 0020, 0019, 0014 and 0027 respectively, which stay in the log as `superseded`. ADRs 0044 and 0045 were drafted by an agent from the WP-M1-02 spike and accepted by the product owner on 2026-10-26.
 
