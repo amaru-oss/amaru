@@ -135,7 +135,7 @@ func TestBuildExecutionEvidenceDoesNotCopyStepInputs(t *testing.T) {
 
 func TestBuildExecutionEvidenceListsWhatItCannotHold(t *testing.T) {
 	b, _ := BuildExecutionEvidence(evidenceInput(t))
-	want := map[string]bool{GapCheck: true, GapDiff: true, GapLog: true, GapUsage: true, GapWorkspace: true}
+	want := map[string]bool{GapCheck: true, GapDiff: true, GapLog: true, GapUsage: true, GapWorkspace: true, GapContext: true}
 	for _, g := range b.Gaps {
 		if !want[g.Kind] || g.Reason == "" {
 			t.Errorf("unexpected gap %+v", g)
@@ -153,6 +153,54 @@ func TestBuildExecutionEvidenceIsFinalOnlyWhenTheExecutionIs(t *testing.T) {
 	b, err := BuildExecutionEvidence(in)
 	if err != nil || b.Final {
 		t.Fatalf("final %v, %v", b.Final, err)
+	}
+}
+
+func TestExecutionEvidenceReportsMissingContext(t *testing.T) {
+	for _, state := range []ExecState{ExecRunning, ExecSucceeded, ExecFailed, ExecCancelled} {
+		for _, recorded := range []int{0, 1, 2} {
+			in := evidenceInput(t)
+			in.Execution.State = state
+			if recorded == 0 {
+				in.Contexts = nil
+			} else if recorded == 2 {
+				other := in.Contexts[0]
+				other.StepID = in.Steps[1].ID
+				in.Contexts = append(in.Contexts, other)
+			}
+			b, err := BuildExecutionEvidence(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, step := range b.Steps {
+				if (step.ContextGap != "") != (step.Context == nil) {
+					t.Fatal("context gap does not identify the missing Step context")
+				}
+			}
+			count := 0
+			for _, gap := range b.Gaps {
+				if gap.Kind == GapContext {
+					count++
+					if gap.Reason == "" {
+						t.Fatal("unexplained context gap")
+					}
+				}
+			}
+			if (count == 1) != (recorded < 2) || count > 1 {
+				t.Fatalf("state %s, recorded %d: context gaps %d", state, recorded, count)
+			}
+		}
+	}
+	in := evidenceInput(t)
+	in.Steps, in.Contexts, in.Events, in.Approvals, in.Audit, in.Artifacts = nil, nil, nil, nil, nil, nil
+	b, err := BuildExecutionEvidence(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, gap := range b.Gaps {
+		if gap.Kind == GapContext {
+			t.Fatal("Execution without Steps has a context gap")
+		}
 	}
 }
 

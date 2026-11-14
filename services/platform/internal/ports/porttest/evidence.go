@@ -66,6 +66,9 @@ func ExecutionEvidence(t *testing.T, newStores func(t *testing.T) EvidenceStores
 		if b.Steps[0].Context == nil || b.Steps[0].Context.Document == "" || b.Steps[1].Context != nil {
 			t.Errorf("context belongs to the first Step only: %+v / %+v", b.Steps[0].Context, b.Steps[1].Context)
 		}
+		if b.Steps[0].ContextGap != "" || b.Steps[1].ContextGap == "" {
+			t.Fatal("context gap does not identify the Step without recorded context")
+		}
 		for _, st := range b.Steps {
 			if len(st.Artifacts) != 1 || st.Artifacts[0].ArtifactID != "out-"+st.ID || st.Artifacts[0].StepID != st.ID {
 				t.Errorf("artifacts of %s: %+v", st.ID, st.Artifacts)

@@ -101,6 +101,14 @@ This reader is internal and unscoped. It is not wired to a public endpoint or a 
 
 The [bounded internal multi-Step walkthrough](../../docs/validation/m3/2026-11-14-linux-art-002-multi-step-walkthrough.md) composes the Coordinator, fake stores, explicit Artifact ingest and Evidence Reader with fake Worker results. It verifies context/Skill identity, accepted Usage and empty-report gaps, Artifact hashes, Approval/Audit attribution, ordered Events and digest stability after replay. On this #19 base, completed Steps leave the Execution running; the test records that limitation and uses explicit cancellation to reach a terminal bundle. Artifact ingest remains a separate call, and the gated Step has no assembled context. This is fake-backed integration evidence, not the complete audit walkthrough or public access validation.
 
+The internal assembler now marks every Step without recorded context with
+`contextGap` and adds one `context` summary to the bundle's `Gaps`, including
+terminal bundles. Recorded contexts have no context gap; an Execution with no
+Steps has none either. This reports absence without inferring whether context
+was pending, inapplicable, lost or never assembled. It changes the internal
+bundle representation and digest, not any stored Approval Evidence or public
+contract. See the [context-gap record](../../docs/validation/m3/2026-11-14-linux-art-002-context-gaps.md).
+
 The [Artifact replay conflict record](../../docs/validation/m3/2026-11-14-linux-art-002-artifact-replay.md) verifies rejection of changed hash, size or media type for the same capture key in fake/PostgreSQL indexes. Exact replay retains the original version and timestamp. Rejected ingestion may leave an unreferenced blob; full Evidence capture/API integration remains open.
 
 The assembler returns an independent copy of its hashed JSON representation: later input edits cannot change the bundle, and editing the bundle cannot change source records. The returned value is still mutable. See the [bundle ownership record](../../docs/validation/m3/2026-11-14-linux-art-002-bundle-ownership.md) for tests and limits.
