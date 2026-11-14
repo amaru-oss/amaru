@@ -249,3 +249,42 @@ func TestHTTPSinkPanicOmitsRawDiagnostic(t *testing.T) {
 		t.Fatal("raw server diagnostic escaped")
 	}
 }
+
+func TestHTTPLogErrorCallbackPanicOmitsRawDiagnostic(t *testing.T) {
+	for _, handlerPanics := range []bool{false, true} {
+		t.Run(map[bool]string{false: "success", true: "handler_panic"}[handlerPanics], func(t *testing.T) {
+			var serverErrors bytes.Buffer
+			logger, _ := New(badWriter{})
+			failures := make(chan error, 1)
+			server := httptest.NewUnstartedServer(logger.HTTP("instance", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if handlerPanics {
+					panic("unregistered-handler-credential")
+				}
+				w.WriteHeader(http.StatusNoContent)
+			}), func(err error) {
+				failures <- err
+				panic("unregistered-callback-credential")
+			}))
+			server.Config.ErrorLog = log.New(&serverErrors, "", 0)
+			server.Start()
+			defer server.Close()
+			res, err := server.Client().Post(server.URL, "text/plain", nil)
+			if err == nil {
+				res.Body.Close()
+				t.Fatal("callback panic did not abort connection")
+			}
+			server.Close()
+			select {
+			case err := <-failures:
+				if err == nil || err.Error() != "operational log write failed" {
+					t.Fatal("unsafe sink error")
+				}
+			default:
+				t.Fatal("missing log failure callback")
+			}
+			if serverErrors.Len() != 0 {
+				t.Fatal("raw callback panic diagnostic escaped")
+			}
+		})
+	}
+}
