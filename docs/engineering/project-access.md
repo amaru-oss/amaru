@@ -35,7 +35,7 @@ Event stream and Evidence reader passed to application calls are trusted deploym
 
 `attach.WorkflowReader` implements `ports.ProjectWorkflowSource`, reusing the Attacher's hardened, bounded Git process path and existing strict `workflowdef` parser. Trusted composition supplies the same Instance's Project clone store; the reader captures its persisted active root. It checks the root's current Project identity, refuses shallow clones, requires a full lowercase commit ID naming a commit, and checks its root commit against the current history using ADR-0046's smallest-root rule. Missing/foreign content returns bare `ErrNotFound`. Only a regular committed `.amaru/workflows/<id>.yaml` blob is read; symlinks, path selectors, mismatched IDs, invalid/oversized definitions and unknown format versions are refused. Repository/parser errors omit raw diagnostics and values. Working-tree edits are not loaded, repository content is not executed, and no Project file or operational record is written by loading.
 
-`ProjectAccess.Workflow` checks live authentication and attached Project membership before calling the trusted source and again after source IO. `RunWorkflowRequest` carries only the command key, Workflow ID, explicit commit ID and variable overrides. `RunWorkflow` loads that definition and rechecks authentication in `Submit`, then reuses existing validation, Policy/Approval, snapshot pinning and atomic command outcomes. The explicit revision keeps retries stable after HEAD changes; changing it with an existing key conflicts. Loading makes no trust decision and grants no execution permission. Draft definitions can be queried but cannot run. No cache is introduced, so Projects and revisions share no mutable definition entry.
+`ProjectAccess.Workflow` checks live authentication and attached Project membership before calling the trusted source and again after source IO. `RunWorkflowRequest` carries only the command key, Workflow ID, explicit commit ID and variable overrides. `RunWorkflow` loads that definition and rechecks authentication before coordinator Submit, retaining the human identity captured before loading for both checks and command attribution. A replacement human ID is refused before returning a definition or reaching command replay/mutation. Post-source authorization failure takes precedence over source errors; otherwise source errors propagate without partial content. Existing validation, Policy/Approval, snapshot pinning and atomic command outcomes are reused. The explicit revision keeps retries stable after HEAD changes; changing it with an existing key conflicts. Loading makes no trust decision and grants no execution permission. Draft definitions can be queried but cannot run. No cache is introduced, so Projects and revisions share no mutable definition entry.
 
 The requested Git object must remain available to load before replay. If it is removed, this application call fails closed; the existing Execution's persisted snapshot remains queryable. Product HTTP replay semantics still require composition acceptance.
 
@@ -290,3 +290,9 @@ attribution. Fake-backed tests reproduce replacement-identity reads and Submit,
 preserve storage/not-found error precedence, and check original-actor positive
 controls. This does not bind identity across every separate operation or make
 authorization atomic with response delivery or database commit.
+
+
+The [Workflow identity record](../validation/m3/2026-11-14-linux-prj-002-workflow-identity.md)
+covers reads, fresh runs and replay across source IO and final submission
+authorization. These are deterministic fake-backed tests, without atomic
+session authorization/commit or new public Workflow routes.
