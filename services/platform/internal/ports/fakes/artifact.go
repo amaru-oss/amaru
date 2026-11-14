@@ -70,6 +70,9 @@ func (s *ArtifactIndex) Record(_ context.Context, v domain.ArtifactVersion) (dom
 	defer s.mu.Unlock()
 	for _, old := range s.versions[v.ArtifactID] {
 		if old.ExecutionID == v.ExecutionID && old.StepID == v.StepID && old.AttemptID == v.AttemptID && old.Path == v.Path {
+			if old.Hash != v.Hash || old.Size != v.Size || old.MediaType != v.MediaType {
+				return domain.ArtifactVersion{}, fmt.Errorf("%w: artifact capture has different content or media type", domain.ErrExists)
+			}
 			return old, nil
 		}
 	}

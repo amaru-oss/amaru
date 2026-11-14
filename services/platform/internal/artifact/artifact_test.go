@@ -184,3 +184,22 @@ func TestIngestingTheSameAttemptAgainAddsNoVersion(t *testing.T) {
 		}
 	})
 }
+
+func TestChangedOutputReplayIsRefused(t *testing.T) {
+	both(t, func(t *testing.T, e env) {
+		ctx := context.Background()
+		out := []Output{{ArtifactID: "report", Path: "report.json"}}
+		first, err := e.i.Ingest(ctx, src, e.location, out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		write(t, filepath.Join(e.location, "report.json"), `{"ok":false}`)
+		if got, err := e.i.Ingest(ctx, src, e.location, out); !errors.Is(err, domain.ErrExists) || got != nil {
+			t.Fatalf("changed output replay: %+v %v", got, err)
+		}
+		vs, err := e.index.ByExecution(ctx, src.ExecutionID)
+		if err != nil || len(vs) != 1 || vs[0] != first[0] {
+			t.Fatalf("history changed: %+v %v", vs, err)
+		}
+	})
+}

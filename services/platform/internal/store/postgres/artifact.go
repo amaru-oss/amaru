@@ -40,6 +40,9 @@ func (s *ArtifactIndex) Record(ctx context.Context, v domain.ArtifactVersion) (d
 		v.ArtifactID, v.ExecutionID, v.StepID, v.AttemptID, v.Path))
 	switch {
 	case err == nil:
+		if old.Hash != v.Hash || old.Size != v.Size || old.MediaType != v.MediaType {
+			return domain.ArtifactVersion{}, fmt.Errorf("%w: artifact capture has different content or media type", domain.ErrExists)
+		}
 		return old, nil
 	case !errors.Is(err, sql.ErrNoRows):
 		return domain.ArtifactVersion{}, err
