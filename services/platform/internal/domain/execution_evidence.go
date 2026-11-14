@@ -100,7 +100,7 @@ type ExecutionEvidenceInput struct {
 // BuildExecutionEvidence assembles the bundle. It returns ErrInvalid when a part belongs to
 // another Execution or Step, or Step/context identities are ambiguous. Steps keep their creation order,
 // Approvals their request order and the logs their Seq order; Artifacts are grouped under their
-// Step.
+// Step. The returned bundle owns its contents; later input edits cannot invalidate its Digest.
 func BuildExecutionEvidence(in ExecutionEvidenceInput) (ExecutionEvidence, error) {
 	id := in.Execution.ID
 	if id == "" {
@@ -236,9 +236,14 @@ func BuildExecutionEvidence(in ExecutionEvidenceInput) (ExecutionEvidence, error
 	if err != nil {
 		return ExecutionEvidence{}, fmt.Errorf("evidence: encode: %w", err)
 	}
+	// Return the exact hashed representation without pointers into the source records.
+	var snapshot ExecutionEvidence
+	if err := json.Unmarshal(raw, &snapshot); err != nil {
+		return ExecutionEvidence{}, fmt.Errorf("evidence: snapshot: %w", err)
+	}
 	sum := sha256.Sum256(raw)
-	out.Digest = "sha256:" + hex.EncodeToString(sum[:])
-	return out, nil
+	snapshot.Digest = "sha256:" + hex.EncodeToString(sum[:])
+	return snapshot, nil
 }
 
 // hasUsageAttempt is scoped to the Step: another Step's receipt is not coverage.

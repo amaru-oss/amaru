@@ -1,11 +1,72 @@
 package domain
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"testing"
 	"time"
 )
+
+func TestExecutionEvidenceOwnsItsHashedContents(t *testing.T) {
+	for _, direction := range []string{"input", "bundle"} {
+		t.Run(direction, func(t *testing.T) {
+			in := evidenceInput(t)
+			at := in.Execution.CreatedAt
+			in.Execution.Definition = &DefinitionPin{Snapshot: json.RawMessage(`{"id":"workflow"}`)}
+			in.Execution.StartedAt = &at
+			in.Steps[0].Agent = &ResolvedAgent{ProviderPreference: []string{"first"}, WorktreeCommands: []string{"go test"}, Skills: []SkillUse{{Name: "skill"}}}
+			in.Steps[0].Error = &ExecError{Code: "original"}
+			in.Contexts[0].Items = []ContextItem{{Name: "original"}}
+			in.Approvals[0].Decision = &ApprovalDecision{Rationale: "original"}
+			zero := uint64(0)
+			credits := 1.5
+			in.Usage = []ResultCapture{{ExecutionID: "e1", StepID: "e1.a", AttemptID: "a1", CapturedAt: at, Reports: []UsageReport{{
+				Provider: "original", InputTokens: &IntMeasurement{Source: UsageReported, Value: &zero},
+				Credits: &DoubleMeasurement{Source: UsageReported, Value: &credits},
+				Cost:    &Cost{Source: UsageReported, Amount: "1.00", Currency: "USD"},
+			}}}}
+			bundle, err := BuildExecutionEvidence(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			encode := func(v any) []byte {
+				t.Helper()
+				raw, err := json.Marshal(v)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return raw
+			}
+			beforeInput, beforeBundle := encode(in), encode(bundle)
+			unhashed := bundle
+			unhashed.Digest = ""
+			if ContentHash(encode(unhashed)) != bundle.Digest {
+				t.Fatal("returned representation does not match its digest")
+			}
+			e, agent, execErr, ctx, approval, usage := &in.Execution, in.Steps[0].Agent, in.Steps[0].Error, &in.Contexts[0], &in.Approvals[0], &in.Usage[0]
+			if direction == "bundle" {
+				e, agent, execErr, ctx, approval, usage = &bundle.Execution, bundle.Steps[0].Agent, bundle.Steps[0].Error, bundle.Steps[0].Context, &bundle.Approvals[0], &bundle.Steps[0].Usage[0]
+			}
+			e.Definition.Snapshot[2] = 'x'
+			*e.StartedAt = at.Add(time.Hour)
+			agent.ProviderPreference[0], agent.WorktreeCommands[0], agent.Skills[0].Name = "changed", "changed", "changed"
+			execErr.Code, ctx.Items[0].Name = "changed", "changed"
+			approval.Evidence.Items[0].ID, approval.Decision.Rationale = "changed", "changed"
+			usage.Reports[0].Provider = "changed"
+			*usage.Reports[0].InputTokens.Value = 99
+			*usage.Reports[0].Credits.Value = 99
+			usage.Reports[0].Cost.Amount = "99"
+			if direction == "input" && !bytes.Equal(beforeBundle, encode(bundle)) {
+				t.Fatal("input mutation changed the already hashed bundle")
+			}
+			if direction == "bundle" && !bytes.Equal(beforeInput, encode(in)) {
+				t.Fatal("bundle mutation changed the source records")
+			}
+		})
+	}
+}
 
 func evidenceInput(t *testing.T) ExecutionEvidenceInput {
 	t.Helper()
