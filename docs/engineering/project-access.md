@@ -238,3 +238,20 @@ This extends the committed Workflow composition evidence under accepted ADR-0062
 ## Work contract proposal (#191)
 
 [ADR-0070](../architecture/adr/0070-project-scoped-work-command-contract.md) is **proposed**, with empty deciders: omitted human-kind owner, Instance-unique allocated display prefixes, explicit reopen reason/history, and command keys plus optimistic versions. It specifies immutable Project ownership, same-Project dependencies and atomic Work/outcome/Event writes under accepted ADR-0058. [Q68](../architecture/OPEN_QUESTIONS.md#q68-project-scoped-work-contract-and-unresolved-mappings) tracks owner approval and unresolved principal, optional-field and dependency-regression mappings. These are implementation gates, not public Work behavior. Schemas, fixtures, SDK, application and storage remain unchanged by the proposal; #191/#18/M3 remain open.
+
+## Authority loss during query IO
+
+The existing application queries for Execution (including its pinned definition),
+Approval, Evidence, Event replay and settings recheck live authority and attached
+Project membership after a successful storage read. Project lookup itself
+rechecks the administrator after IO. Revocation or request cancellation observed
+by that final check returns no records or cursor; failed reads also return zero
+results even if a dependency supplies partial data with its error. Workflow and
+Artifact queries retain their existing post-IO checks.
+
+The [Linux query authority record](../validation/m3/2026-11-14-linux-prj-002-read-authority.md)
+covers deterministic fake-backed regressions. This is no atomic guarantee between
+the final authority check and response delivery, and does not change mutation
+transaction semantics. It adds no public Evidence route, snapshot authorization
+or wire contract; ADR-0071 is outside this #18 slice. Product/Provider, Work and
+secret-delivery acceptance remain open under #191/#18/M3.

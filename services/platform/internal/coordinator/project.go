@@ -44,7 +44,7 @@ func (a *ProjectAccess) administrator(ctx context.Context) (domain.Principal, er
 }
 
 func (a *ProjectAccess) authorize(ctx context.Context, project domain.ProjectKey) (domain.Principal, error) {
-	by, err := a.administrator(ctx)
+	_, err := a.administrator(ctx)
 	if err != nil {
 		return domain.Principal{}, err
 	}
@@ -61,7 +61,8 @@ func (a *ProjectAccess) authorize(ctx context.Context, project domain.ProjectKey
 	if p.Key != project {
 		return domain.Principal{}, domain.ErrNotFound
 	}
-	return by, nil
+	// Project lookup can block while a session is revoked or its request is canceled.
+	return a.administrator(ctx)
 }
 
 func (a *ProjectAccess) execution(ctx context.Context, project domain.ProjectKey, id string) (domain.Execution, []domain.StepExecution, error) {
@@ -77,7 +78,14 @@ func (a *ProjectAccess) Execution(ctx context.Context, project domain.ProjectKey
 	if _, err := a.authorize(ctx, project); err != nil {
 		return domain.Execution{}, nil, err
 	}
-	return a.execution(ctx, project, id)
+	e, steps, err := a.execution(ctx, project, id)
+	if err != nil {
+		return domain.Execution{}, nil, err
+	}
+	if _, err := a.authorize(ctx, project); err != nil {
+		return domain.Execution{}, nil, err
+	}
+	return e, steps, nil
 }
 
 // Submit derives attribution and Project identity from authorized context, not the body.
@@ -127,7 +135,14 @@ func (a *ProjectAccess) Approval(ctx context.Context, project domain.ProjectKey,
 	if _, err := a.authorize(ctx, project); err != nil {
 		return domain.Approval{}, err
 	}
-	return a.approval(ctx, project, id)
+	approval, err := a.approval(ctx, project, id)
+	if err != nil {
+		return domain.Approval{}, err
+	}
+	if _, err := a.authorize(ctx, project); err != nil {
+		return domain.Approval{}, err
+	}
+	return approval, nil
 }
 
 func (a *ProjectAccess) DecideApproval(ctx context.Context, project domain.ProjectKey, req DecideRequest) (Decided, bool, error) {
@@ -163,7 +178,14 @@ func (a *ProjectAccess) Evidence(ctx context.Context, project domain.ProjectKey,
 	if reader == nil {
 		return domain.ExecutionEvidence{}, domain.ErrInvalid
 	}
-	return reader.Bundle(ctx, id)
+	bundle, err := reader.Bundle(ctx, id)
+	if err != nil {
+		return domain.ExecutionEvidence{}, err
+	}
+	if _, err := a.authorize(ctx, project); err != nil {
+		return domain.ExecutionEvidence{}, err
+	}
+	return bundle, nil
 }
 
 // Events authorizes the Project and any Execution filter before exposing even a resync cursor.
@@ -180,7 +202,14 @@ func (a *ProjectAccess) Events(ctx context.Context, q domain.EventQuery, stream 
 	if stream == nil {
 		return domain.EventPage{}, domain.ErrInvalid
 	}
-	return stream.ReadEvents(ctx, q, a.coordinator.now(), window)
+	page, err := stream.ReadEvents(ctx, q, a.coordinator.now(), window)
+	if err != nil {
+		return domain.EventPage{}, err
+	}
+	if _, err := a.authorize(ctx, domain.ProjectKey(q.ProjectID)); err != nil {
+		return domain.EventPage{}, err
+	}
+	return page, nil
 }
 
 // ResumeStep rechecks Project ownership before command replay or a human transition.
