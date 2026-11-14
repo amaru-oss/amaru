@@ -161,3 +161,10 @@ checks after blocking ownership reads. Its deterministic matrix includes fresh
 mutations, replay, revocation, cancellation, changed human identity and preserved
 storage/missing/foreign errors. These are fake-backed unit tests, without an
 atomic authorization/commit guarantee or new public mutation routes.
+
+
+The [Project lookup identity record](../validation/m3/2026-11-14-linux-prj-002-lookup-identity.md)
+covers the shared Project authorization helper retaining the pre-lookup human ID.
+Its fake-backed read/Submit matrix checks replacement-identity denial before
+resource access or coordinator replay/mutation, original attribution, and error
+precedence. This is unit evidence, not a new HTTP/session or PostgreSQL run.

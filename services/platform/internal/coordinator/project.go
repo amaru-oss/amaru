@@ -44,7 +44,7 @@ func (a *ProjectAccess) administrator(ctx context.Context) (domain.Principal, er
 }
 
 func (a *ProjectAccess) authorize(ctx context.Context, project domain.ProjectKey) (domain.Principal, error) {
-	_, err := a.administrator(ctx)
+	by, err := a.administrator(ctx)
 	if err != nil {
 		return domain.Principal{}, err
 	}
@@ -61,8 +61,15 @@ func (a *ProjectAccess) authorize(ctx context.Context, project domain.ProjectKey
 	if p.Key != project {
 		return domain.Principal{}, domain.ErrNotFound
 	}
-	// Project lookup can block while a session is revoked or its request is canceled.
-	return a.administrator(ctx)
+	// Project lookup must not rebind the request to a replacement administrator.
+	current, err := a.administrator(ctx)
+	if err != nil {
+		return domain.Principal{}, err
+	}
+	if current.ID != by.ID {
+		return domain.Principal{}, domain.ErrNotPermitted
+	}
+	return by, nil
 }
 
 func (a *ProjectAccess) execution(ctx context.Context, project domain.ProjectKey, id string) (domain.Execution, []domain.StepExecution, error) {
