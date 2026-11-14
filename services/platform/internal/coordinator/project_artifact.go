@@ -12,7 +12,8 @@ import (
 // ArtifactVersions returns only versions produced by Executions in the selected Project.
 // index is trusted Instance storage; Artifact IDs alone never establish ownership.
 func (a *ProjectAccess) ArtifactVersions(ctx context.Context, project domain.ProjectKey, id string, index ports.ArtifactIndex) ([]domain.ArtifactVersion, error) {
-	if _, err := a.authorize(ctx, project); err != nil {
+	by, err := a.authorize(ctx, project)
+	if err != nil {
 		return nil, err
 	}
 	if index == nil || id == "" || len(id) > domain.MaxArtifactIDLen {
@@ -34,8 +35,12 @@ func (a *ProjectAccess) ArtifactVersions(ctx context.Context, project domain.Pro
 		}
 		owned = append(owned, v)
 	}
-	if _, err := a.authorize(ctx, project); err != nil {
+	current, err := a.authorize(ctx, project)
+	if err != nil {
 		return nil, err
+	}
+	if current.ID != by.ID {
+		return nil, domain.ErrNotPermitted
 	}
 	if len(owned) == 0 {
 		return nil, domain.ErrNotFound
@@ -46,6 +51,10 @@ func (a *ProjectAccess) ArtifactVersions(ctx context.Context, project domain.Pro
 // ArtifactContent opens an exact owned version, never a caller-supplied content hash.
 // The caller closes the returned reader. blobs is trusted Instance storage.
 func (a *ProjectAccess) ArtifactContent(ctx context.Context, project domain.ProjectKey, id string, version int64, index ports.ArtifactIndex, blobs ports.BlobStore) (io.ReadCloser, error) {
+	by, err := a.administrator(ctx)
+	if err != nil {
+		return nil, err
+	}
 	versions, err := a.ArtifactVersions(ctx, project, id, index)
 	if err != nil {
 		return nil, err
@@ -61,9 +70,14 @@ func (a *ProjectAccess) ArtifactContent(ctx context.Context, project domain.Proj
 		if err != nil {
 			return nil, err
 		}
-		if _, err := a.authorize(ctx, project); err != nil {
+		current, err := a.authorize(ctx, project)
+		if err != nil {
 			_ = r.Close()
 			return nil, err
+		}
+		if current.ID != by.ID {
+			_ = r.Close()
+			return nil, domain.ErrNotPermitted
 		}
 		return r, nil
 	}

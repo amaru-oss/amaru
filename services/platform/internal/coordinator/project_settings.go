@@ -10,7 +10,8 @@ import (
 // Settings rechecks current identity and attachment before reading preferences.
 // store is a trusted composition dependency, never supplied by a client.
 func (a *ProjectAccess) Settings(ctx context.Context, project domain.ProjectKey, store ports.SettingsStore) (domain.ProjectSettings, error) {
-	if _, err := a.authorize(ctx, project); err != nil {
+	by, err := a.authorize(ctx, project)
+	if err != nil {
 		return domain.ProjectSettings{}, err
 	}
 	if store == nil {
@@ -20,8 +21,12 @@ func (a *ProjectAccess) Settings(ctx context.Context, project domain.ProjectKey,
 	if err != nil {
 		return domain.ProjectSettings{}, err
 	}
-	if _, err := a.authorize(ctx, project); err != nil {
+	current, err := a.authorize(ctx, project)
+	if err != nil {
 		return domain.ProjectSettings{}, err
+	}
+	if current.ID != by.ID {
+		return domain.ProjectSettings{}, domain.ErrNotPermitted
 	}
 	return settings, nil
 }

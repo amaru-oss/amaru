@@ -174,3 +174,11 @@ The [Workflow identity record](../validation/m3/2026-11-14-linux-prj-002-workflo
 covers original-human binding across committed source loading and submission,
 including post-source error precedence and denial before replay or mutation.
 It is fake-backed unit evidence, not a public Workflow HTTP/SDK or PostgreSQL run.
+
+
+The [query identity record](../validation/m3/2026-11-14-linux-prj-002-query-identity.md)
+covers original-human binding across Execution/Approval ownership, Evidence,
+Event, settings and Artifact read IO, including closing denied Artifact content.
+Run `go test -race -count=100 -run '^TestProjectReadAuthorityDuringIO$' ./internal/coordinator`
+from `services/platform`. This is deterministic fake-backed unit evidence;
+it adds no public route, PostgreSQL or product acceptance claim.

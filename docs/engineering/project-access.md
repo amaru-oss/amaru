@@ -296,3 +296,15 @@ The [Workflow identity record](../validation/m3/2026-11-14-linux-prj-002-workflo
 covers reads, fresh runs and replay across source IO and final submission
 authorization. These are deterministic fake-backed tests, without atomic
 session authorization/commit or new public Workflow routes.
+
+
+The [query identity record](../validation/m3/2026-11-14-linux-prj-002-query-identity.md)
+extends Execution/pinned definition, Approval, Evidence, Event, settings and
+Artifact reads to compare the final authorized human ID with the original ID.
+A different valid owner receives no data or cursor; Artifact content opened
+before rejection is closed. Evidence and content retain their nested ownership
+checks and capture identity before those checks as well as the later reader IO.
+Storage/missing/foreign-resource error precedence is unchanged. These fake-backed
+unit tests do not establish continuous session validity or atomic authorization
+with response delivery. Project inspection/list/attach operations and mutations
+are outside this bounded read slice; #191/#18/M3 acceptance remains open.

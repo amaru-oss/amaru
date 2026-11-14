@@ -82,15 +82,20 @@ func (a *ProjectAccess) execution(ctx context.Context, project domain.ProjectKey
 
 // Execution refuses missing and foreign IDs identically, before returning child records.
 func (a *ProjectAccess) Execution(ctx context.Context, project domain.ProjectKey, id string) (domain.Execution, []domain.StepExecution, error) {
-	if _, err := a.authorize(ctx, project); err != nil {
+	by, err := a.authorize(ctx, project)
+	if err != nil {
 		return domain.Execution{}, nil, err
 	}
 	e, steps, err := a.execution(ctx, project, id)
 	if err != nil {
 		return domain.Execution{}, nil, err
 	}
-	if _, err := a.authorize(ctx, project); err != nil {
+	current, err := a.authorize(ctx, project)
+	if err != nil {
 		return domain.Execution{}, nil, err
+	}
+	if current.ID != by.ID {
+		return domain.Execution{}, nil, domain.ErrNotPermitted
 	}
 	return e, steps, nil
 }
@@ -146,15 +151,20 @@ func (a *ProjectAccess) approval(ctx context.Context, project domain.ProjectKey,
 }
 
 func (a *ProjectAccess) Approval(ctx context.Context, project domain.ProjectKey, id string) (domain.Approval, error) {
-	if _, err := a.authorize(ctx, project); err != nil {
+	by, err := a.authorize(ctx, project)
+	if err != nil {
 		return domain.Approval{}, err
 	}
 	approval, err := a.approval(ctx, project, id)
 	if err != nil {
 		return domain.Approval{}, err
 	}
-	if _, err := a.authorize(ctx, project); err != nil {
+	current, err := a.authorize(ctx, project)
+	if err != nil {
 		return domain.Approval{}, err
+	}
+	if current.ID != by.ID {
+		return domain.Approval{}, domain.ErrNotPermitted
 	}
 	return approval, nil
 }
@@ -193,6 +203,10 @@ func (a *ProjectAccess) Definition(ctx context.Context, project domain.ProjectKe
 // Evidence checks ownership before reading contexts, artifacts, Events or Approval audit.
 // The reader is a trusted composition dependency, never supplied by a client.
 func (a *ProjectAccess) Evidence(ctx context.Context, project domain.ProjectKey, id string, reader ports.EvidenceReader) (domain.ExecutionEvidence, error) {
+	by, err := a.administrator(ctx)
+	if err != nil {
+		return domain.ExecutionEvidence{}, err
+	}
 	if _, _, err := a.Execution(ctx, project, id); err != nil {
 		return domain.ExecutionEvidence{}, err
 	}
@@ -203,8 +217,12 @@ func (a *ProjectAccess) Evidence(ctx context.Context, project domain.ProjectKey,
 	if err != nil {
 		return domain.ExecutionEvidence{}, err
 	}
-	if _, err := a.authorize(ctx, project); err != nil {
+	current, err := a.authorize(ctx, project)
+	if err != nil {
 		return domain.ExecutionEvidence{}, err
+	}
+	if current.ID != by.ID {
+		return domain.ExecutionEvidence{}, domain.ErrNotPermitted
 	}
 	return bundle, nil
 }
@@ -212,7 +230,8 @@ func (a *ProjectAccess) Evidence(ctx context.Context, project domain.ProjectKey,
 // Events authorizes the Project and any Execution filter before exposing even a resync cursor.
 // stream and window are trusted deployment dependencies; now comes from the coordinator.
 func (a *ProjectAccess) Events(ctx context.Context, q domain.EventQuery, stream ports.EventStream, window time.Duration) (domain.EventPage, error) {
-	if _, err := a.authorize(ctx, domain.ProjectKey(q.ProjectID)); err != nil {
+	by, err := a.authorize(ctx, domain.ProjectKey(q.ProjectID))
+	if err != nil {
 		return domain.EventPage{}, err
 	}
 	if q.ExecutionID != "" {
@@ -227,8 +246,12 @@ func (a *ProjectAccess) Events(ctx context.Context, q domain.EventQuery, stream 
 	if err != nil {
 		return domain.EventPage{}, err
 	}
-	if _, err := a.authorize(ctx, domain.ProjectKey(q.ProjectID)); err != nil {
+	current, err := a.authorize(ctx, domain.ProjectKey(q.ProjectID))
+	if err != nil {
 		return domain.EventPage{}, err
+	}
+	if current.ID != by.ID {
+		return domain.EventPage{}, domain.ErrNotPermitted
 	}
 	return page, nil
 }
