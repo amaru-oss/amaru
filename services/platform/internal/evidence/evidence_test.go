@@ -17,6 +17,7 @@ import (
 type executionRead struct {
 	ports.ExecutionStore
 	usage      []domain.ResultCapture
+	definition *domain.DefinitionPin
 	attempt    string
 	id         string
 	fail       string
@@ -29,7 +30,7 @@ func (s *executionRead) Get(context.Context, string) (domain.Execution, []domain
 	if s.fail == "execution" {
 		return domain.Execution{}, nil, s.err
 	}
-	return domain.Execution{ID: s.id, State: domain.ExecRunning}, []domain.StepExecution{{ID: "s1", ExecutionID: s.id, AttemptID: s.attempt}, {ID: "s2", ExecutionID: s.id}}, nil
+	return domain.Execution{ID: s.id, State: domain.ExecRunning, Definition: s.definition}, []domain.StepExecution{{ID: "s1", ExecutionID: s.id, AttemptID: s.attempt}, {ID: "s2", ExecutionID: s.id}}, nil
 }
 func (s *executionRead) Events(context.Context, string) ([]domain.ExecutionEvent, error) {
 	if s.fail == "events" {
@@ -130,6 +131,13 @@ func TestBundleStoreFailureReturnsNoPartialEvidence(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestBundleRejectsDamagedDefinition(t *testing.T) {
+	r, s := readerFixture()
+	s.definition = &domain.DefinitionPin{WorkflowID: "ship-it", Hash: domain.ContentHash([]byte("original")), Snapshot: []byte(`{"id":"ship-it"}`)}
+	b, err := r.Bundle(context.Background(), "e1")
+	assertNoBundle(t, b, err, domain.ErrInvalid)
 }
 
 func TestBundleAuditPaginationFiltersEveryPage(t *testing.T) {

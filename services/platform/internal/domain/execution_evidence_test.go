@@ -14,7 +14,11 @@ func TestExecutionEvidenceOwnsItsHashedContents(t *testing.T) {
 		t.Run(direction, func(t *testing.T) {
 			in := evidenceInput(t)
 			at := in.Execution.CreatedAt
-			in.Execution.Definition = &DefinitionPin{Snapshot: json.RawMessage(`{"id":"workflow"}`)}
+			pin, err := Pin(pinnable(), "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			in.Execution.Definition = &pin
 			in.Execution.StartedAt = &at
 			in.Steps[0].Agent = &ResolvedAgent{ProviderPreference: []string{"first"}, WorktreeCommands: []string{"go test"}, Skills: []SkillUse{{Name: "skill"}}}
 			in.Steps[0].Error = &ExecError{Code: "original"}
@@ -96,6 +100,36 @@ func evidenceInput(t *testing.T) ExecutionEvidenceInput {
 			{ArtifactID: "a", Version: 1, ExecutionID: "e1", StepID: "e1.a"},
 			{ArtifactID: "m", Version: 1, ExecutionID: "e1", StepID: "e1.b"},
 		},
+	}
+}
+
+func TestExecutionEvidenceValidatesPinnedDefinition(t *testing.T) {
+	for _, damage := range []string{"none", "hash", "identity", "invalid workflow"} {
+		t.Run(damage, func(t *testing.T) {
+			in := evidenceInput(t)
+			pin, err := Pin(pinnable(), "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch damage {
+			case "hash":
+				pin.Hash = ContentHash([]byte("different content"))
+			case "identity":
+				pin.WorkflowID = "other-flow"
+			case "invalid workflow":
+				pin.Snapshot = json.RawMessage(`{"id":"ship-it"}`)
+				pin.Hash = ContentHash(pin.Snapshot)
+			}
+			in.Execution.Definition = &pin
+			b, err := BuildExecutionEvidence(in)
+			if damage == "none" {
+				if err != nil || !reflect.DeepEqual(b.Execution.Definition, &pin) {
+					t.Fatalf("valid pin changed: %+v, %v", b.Execution.Definition, err)
+				}
+			} else if !errors.Is(err, ErrInvalid) || !reflect.DeepEqual(b, ExecutionEvidence{}) {
+				t.Fatalf("damaged definition returned Evidence: %+v, %v", b, err)
+			}
+		})
 	}
 }
 

@@ -123,3 +123,8 @@ The [Artifact replay conflict record](../validation/m3/2026-11-14-linux-art-002-
 The [bundle ownership record](../validation/m3/2026-11-14-linux-art-002-bundle-ownership.md) covers isolation of the assembled, hashed Evidence from later changes to its input records. It does not make the returned Go value immutable or complete ART-002 acceptance.
 
 The [public read contract proposal record](../validation/m3/2026-11-14-linux-art-002-read-contract-proposal.md) records #400 exact-head review/merge and the next proposed decision in ADR-0071. It provides no runtime Evidence API acceptance; owner approval and implementation remain required.
+
+The [definition integrity record](../validation/m3/2026-11-14-linux-art-002-definition-integrity.md)
+covers rejection of damaged pinned Workflow definitions during internal Evidence
+assembly and Reader error propagation. It does not establish definition
+authenticity, public API access or complete ART-002 acceptance.

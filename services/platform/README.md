@@ -112,3 +112,10 @@ contract. See the [context-gap record](../../docs/validation/m3/2026-11-14-linux
 The [Artifact replay conflict record](../../docs/validation/m3/2026-11-14-linux-art-002-artifact-replay.md) verifies rejection of changed hash, size or media type for the same capture key in fake/PostgreSQL indexes. Exact replay retains the original version and timestamp. Rejected ingestion may leave an unreferenced blob; full Evidence capture/API integration remains open.
 
 The assembler returns an independent copy of its hashed JSON representation: later input edits cannot change the bundle, and editing the bundle cannot change source records. The returned value is still mutable. See the [bundle ownership record](../../docs/validation/m3/2026-11-14-linux-art-002-bundle-ownership.md) for tests and limits.
+
+Before assembling Evidence, the internal assembler validates a present pinned
+Workflow with the existing pin validator. A mismatched hash or Workflow identity,
+or an invalid Workflow snapshot, returns `domain.ErrInvalid` and no bundle.
+Executions submitted without a Workflow still have no pin. This checks recorded
+definition integrity; it does not establish authenticity, public access or full
+Evidence completeness. See the [definition integrity record](../../docs/validation/m3/2026-11-14-linux-art-002-definition-integrity.md).
