@@ -22,6 +22,8 @@ What can be checked locally today, and how to report it.
 
 No hosted CI is configured; local results are not CI results.
 
+The [POL-003 continuation assessment](../validation/m3/2026-11-14-linux-pol-003-assessment.md) inventories existing Grant/Approval Audit writes, missing expiry/Policy mutation semantics and the #135 prerequisite absent from #16. Its fake-backed checks do not establish persistence-failure rollback or complete POL-003 acceptance.
+
 ## Evidence levels
 Use these words in reports and docs:
 - **Unit-tested**: automated tests with fakes cover the behavior.
