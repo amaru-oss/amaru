@@ -59,7 +59,8 @@ type response struct {
 
 func (w *response) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 func (w *response) WriteHeader(status int) {
-	if status >= 100 && status < 200 {
+	// Like net/http, treat 101 as final: no later header replaces the upgrade.
+	if status >= 100 && status < 200 && status != http.StatusSwitchingProtocols {
 		w.ResponseWriter.WriteHeader(status)
 		return
 	}

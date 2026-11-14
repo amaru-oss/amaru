@@ -13,6 +13,59 @@ import (
 	"testing"
 )
 
+func TestHTTPInformationalAndUpgradeStatus(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		headers  []int
+		implicit string
+		want     int
+	}{
+		{"upgrade", []int{101}, "", 101},
+		{"hints_then_upgrade", []int{103, 101}, "", 101},
+		{"upgrade_then_header", []int{101, 204}, "", 101},
+		{"hints_then_final", []int{103, 204}, "", 204},
+		{"hints_then_write", []int{103}, "write", 200},
+		{"hints_then_flush", []int{103}, "flush", 200},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var output bytes.Buffer
+			logger, _ := New(&output)
+			server := httptest.NewServer(logger.HTTP("instance", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				for _, status := range tc.headers {
+					w.WriteHeader(status)
+				}
+				switch tc.implicit {
+				case "write":
+					_, _ = w.Write([]byte("private-response-body"))
+				case "flush":
+					if err := http.NewResponseController(w).Flush(); err != nil {
+						t.Error(err)
+					}
+				}
+			}), func(err error) { t.Error(err) }))
+			defer server.Close()
+			res, err := server.Client().Get(server.URL + "/?token=private-query")
+			if err != nil {
+				t.Fatal(err)
+			}
+			res.Body.Close()
+			server.Close()
+			recs := records(t, &output)
+			if len(recs) != 1 {
+				t.Fatalf("records: %d", len(recs))
+			}
+			if res.StatusCode != tc.want || recs[0]["status"] != float64(tc.want) || recs[0]["outcome"] != "succeeded" || recs[0]["correlationId"] == "" {
+				t.Fatalf("wire status %d, diagnostic %v, want %d", res.StatusCode, recs[0], tc.want)
+			}
+			for _, secret := range []string{"private-response-body", "private-query"} {
+				if strings.Contains(output.String(), secret) {
+					t.Fatal("HTTP diagnostic leaked input")
+				}
+			}
+		})
+	}
+}
+
 func TestHTTPAuthCaptureOmitsCredentials(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
