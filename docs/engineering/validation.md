@@ -109,4 +109,6 @@ The [Linux read-scope record](../validation/m3/2026-11-14-linux-art-002-read-sco
 
 The [audit-page validation record](../validation/m3/2026-11-14-linux-art-002-audit-pages.md) covers rejection of oversized, duplicate, descending and non-advancing pages by the Evidence Reader. This does not bound the total audit history or complete the ART-002 walkthrough.
 
+The [Step-identity validation record](../validation/m3/2026-11-14-linux-art-002-step-identity.md) covers rejection of empty/duplicate Step IDs and duplicate contexts by the shared Evidence assembler. This does not establish new recorder or public API acceptance.
+
 The [internal multi-Step walkthrough record](../validation/m3/2026-11-14-linux-art-002-multi-step-walkthrough.md) covers Coordinator/store/Reader composition with fake Worker results, context, explicit Artifact ingest, Approval/Audit, Usage, ordered Events and an explicitly cancelled terminal bundle. It records the #19 base's missing normal Execution completion, absent gated-Step context and remaining recorder gaps. It does not complete #124 or the parent #19 audit chain.

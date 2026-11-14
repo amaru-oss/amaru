@@ -98,7 +98,7 @@ type ExecutionEvidenceInput struct {
 }
 
 // BuildExecutionEvidence assembles the bundle. It returns ErrInvalid when a part belongs to
-// another Execution or Step, so a bundle never mixes runs. Steps keep their creation order,
+// another Execution or Step, or Step/context identities are ambiguous. Steps keep their creation order,
 // Approvals their request order and the logs their Seq order; Artifacts are grouped under their
 // Step.
 func BuildExecutionEvidence(in ExecutionEvidenceInput) (ExecutionEvidence, error) {
@@ -117,6 +117,9 @@ func BuildExecutionEvidence(in ExecutionEvidenceInput) (ExecutionEvidence, error
 		Gaps:      evidenceGaps(),
 	}
 	for i, st := range in.Steps {
+		if _, exists := steps[st.ID]; st.ID == "" || exists {
+			return ExecutionEvidence{}, invalid("evidence: empty or duplicate step id %q", st.ID)
+		}
 		if st.ExecutionID != id {
 			return ExecutionEvidence{}, invalid("evidence: step %s belongs to execution %s, not %s", st.ID, st.ExecutionID, id)
 		}
@@ -170,6 +173,9 @@ func BuildExecutionEvidence(in ExecutionEvidenceInput) (ExecutionEvidence, error
 		i, ok := steps[c.StepID]
 		if !ok || c.ExecutionID != id {
 			return ExecutionEvidence{}, invalid("evidence: context of step %s/%s is not a step of execution %s", c.ExecutionID, c.StepID, id)
+		}
+		if out.Steps[i].Context != nil {
+			return ExecutionEvidence{}, invalid("evidence: duplicate context for step %s", c.StepID)
 		}
 		c := c
 		out.Steps[i].Context = &c
