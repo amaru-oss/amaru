@@ -3,7 +3,9 @@ package coordinator_test
 import (
 	"context"
 	"errors"
+	"io"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -75,16 +77,20 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 	project := domain.ProjectKey("ssh://github.com/acme/a#0123456789abcdef0123456789abcdef01234567")
 	owner := domain.Principal{Kind: domain.PrincipalHuman, ID: "owner", Role: domain.RoleOwner}
 	failed := errors.New("storage unavailable")
-	for _, operation := range []string{"project lookup", "execution", "approval", "events", "evidence", "settings"} {
-		for _, outcome := range []string{"authorized", "revoked", "canceled", "storage error"} {
-			if operation == "project lookup" && outcome == "storage error" {
+	for _, operation := range []string{"project lookup", "execution", "approval", "events", "evidence", "settings", "artifact versions", "artifact content", "event ownership", "evidence ownership", "artifact ownership"} {
+		for _, outcome := range []string{"authorized", "revoked", "canceled", "identity changed", "storage error", "storage error with identity changed"} {
+			if operation == "project lookup" && strings.HasPrefix(outcome, "storage error") {
 				continue
 			}
 			t.Run(operation+"/"+outcome, func(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 				revoked := false
+				current := owner
 				after := func() {
+					if strings.Contains(outcome, "identity changed") {
+						current.ID = "replacement-owner"
+					}
 					if outcome == "revoked" {
 						revoked = true
 					}
@@ -93,7 +99,7 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 					}
 				}
 				var failure error
-				if outcome == "storage error" {
+				if strings.HasPrefix(outcome, "storage error") {
 					failure = failed
 				}
 				projects := fakes.NewProjectStore()
@@ -105,18 +111,34 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 				if operation == "project lookup" {
 					projectStore = readAuthorityProjects{projects, after}
 				}
-				if operation == "execution" || operation == "approval" {
+				if operation == "execution" || operation == "approval" || strings.HasSuffix(operation, "ownership") {
 					store.after, store.failure = after, failure
 				}
 				api, err := coordinator.NewProjectAccess(coordinator.New(store, time.Now), projectStore, func(context.Context) (domain.Principal, error) {
 					if revoked {
 						return domain.Principal{}, domain.ErrNotPermitted
 					}
-					return owner, nil
+					return current, nil
 				})
 				if err != nil {
 					t.Fatal(err)
 				}
+				reader := &closeProbe{Reader: strings.NewReader("private")}
+				index := artifactIndexProbe{read: func(context.Context, string) ([]domain.ArtifactVersion, error) {
+					var indexFailure error
+					if operation == "artifact versions" {
+						after()
+						indexFailure = failure
+					}
+					return []domain.ArtifactVersion{{ArtifactID: "report", ExecutionID: "execution", Version: 1, Hash: "hash"}}, indexFailure
+				}}
+				blobs := artifactBlobProbe{open: func(context.Context, string) (io.ReadCloser, error) {
+					after()
+					if failure != nil {
+						return nil, failure
+					}
+					return reader, nil
+				}}
 				var got, zero any
 				switch operation {
 				case "project lookup", "execution":
@@ -127,10 +149,27 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 				case "approval":
 					got, err = api.Approval(ctx, project, "approval")
 					zero = domain.Approval{}
+				case "event ownership":
+					got, err = api.Events(ctx, domain.EventQuery{ProjectID: string(project), ExecutionID: "execution", Limit: 10}, readAuthorityStream{func() {}, nil}, time.Hour)
+					zero = domain.EventPage{}
+				case "artifact versions", "artifact ownership":
+					got, err = api.ArtifactVersions(ctx, project, "report", index)
+					zero = []domain.ArtifactVersion(nil)
+				case "artifact content":
+					var r io.ReadCloser
+					r, err = api.ArtifactContent(ctx, project, "report", 1, index, blobs)
+					got, zero = r, io.ReadCloser(nil)
+					if outcome == "authorized" {
+						if r != nil {
+							defer r.Close()
+						}
+					} else if !strings.HasPrefix(outcome, "storage error") && !reader.closed {
+						t.Fatal("denied content left reader open")
+					}
 				case "events":
 					got, err = api.Events(ctx, domain.EventQuery{ProjectID: string(project), Limit: 10}, readAuthorityStream{after, failure}, time.Hour)
 					zero = domain.EventPage{}
-				case "evidence":
+				case "evidence", "evidence ownership":
 					got, err = api.Evidence(ctx, project, "execution", readAuthorityEvidence{after, failure})
 					zero = domain.ExecutionEvidence{}
 				case "settings":
@@ -144,7 +183,7 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 					return
 				}
 				want := failed
-				if outcome == "revoked" {
+				if outcome == "revoked" || outcome == "identity changed" {
 					want = domain.ErrNotPermitted
 				}
 				if outcome == "canceled" {
