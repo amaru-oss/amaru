@@ -116,3 +116,5 @@ The [internal multi-Step walkthrough record](../validation/m3/2026-11-14-linux-a
 The [Artifact replay conflict record](../validation/m3/2026-11-14-linux-art-002-artifact-replay.md) covers fake/PostgreSQL capture-key replay rejection and changed-byte ingester retries with fake/filesystem blobs. It preserves original versions and exact replays; full ART-002 acceptance remains open.
 
 The [bundle ownership record](../validation/m3/2026-11-14-linux-art-002-bundle-ownership.md) covers isolation of the assembled, hashed Evidence from later changes to its input records. It does not make the returned Go value immutable or complete ART-002 acceptance.
+
+The [public read contract proposal record](../validation/m3/2026-11-14-linux-art-002-read-contract-proposal.md) records #400 exact-head review/merge and the next proposed decision in ADR-0071. It provides no runtime Evidence API acceptance; owner approval and implementation remain required.

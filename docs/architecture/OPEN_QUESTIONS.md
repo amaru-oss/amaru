@@ -4,6 +4,13 @@ Questions that block or shape decisions. Each is closed by an ADR ([DECISIONS](D
 
 ## Questions
 
+### Q69. Public Evidence read contract
+
+- **Question:** which versioned route, public response projection, completeness/availability vocabulary, access/error mapping and single-query limits should #124 expose?
+- **Evidence:** #19 head `5cf51aa0eec42bbbb3b4e59ec38d4fcacf3ff453` has internal transaction-aware metadata reads but no authorized public Evidence route. The #18 application/HTTP authority composition is on a separate integration branch. Accepted ADR-0069 requires contract review before exposure and does not approve a new wire shape.
+- **Proposal:** [ADR-0071](adr/0071-project-scoped-evidence-read-contract.md) recommends one Project-scoped read with an explicit public metadata projection/digest, separate blob availability, honest completeness, generic scoped errors, and proposed 10,000-record/16-MiB/30-second limits. No endpoint, schema or fixture is implemented by the proposal.
+- **Owner:** Ricardo Lüders. **Status:** open; explicit contract approval required before implementation. #124/#19/#20 remain open. Numbering was checked across fetched refs: #18 already allocates Q62–Q68, including a different Q61. Existing question numbers/anchors are preserved; that older cross-branch Q61 collision still needs reconciliation when the branches integrate.
+
 **Q61 closed by explicit owner approval of ADR-0069 on 2026-11-13 (America/Sao_Paulo); ART-002 implementation and acceptance remain open.** Q60 was closed by owner approval of ADR-0058 on 2026-11-12; EXE-005 implementation and contract verification remain pending. Q59 (2026-10-27) records delegated domain decisions. Q55 (raised by WP-M1-05) was closed on 2026-10-26 by ADR-0046; Q56–Q58 (raised by WP-M1-04) were closed the same day by ADR-0048. Two passes on 2026-10-25 closed every question:
 - **First pass, Q1–Q22 and W1–W4.** A product-owner planning session answered or delegated each question and accepted ADRs 0014–0039. Owner answers are kept as given, with spelling normalized. Where the owner delegated an answer ("you can decide"), Claude decided under that delegation and the decision was accepted in the same session.
 - **Second pass, Q23–Q54.** A full sweep of the planning documents found questions that had been left implicit: choices deferred to spikes, contradictions between ADRs, unset numeric targets, and design questions recorded only as feature "risks". The owner delegated all of them in the planning prompt ("make the most defensible decision"). Significant ones are accepted ADRs 0040–0043, which supersede 0020, 0019, 0014 and 0027. Reversible ones are decided in the document named in each entry. No first-pass owner answer was overturned. Two were refined:
