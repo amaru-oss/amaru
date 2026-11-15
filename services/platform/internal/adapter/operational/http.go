@@ -2,6 +2,7 @@ package operational
 
 import (
 	"bufio"
+	"context"
 	"crypto/rand"
 	"net"
 	"net/http"
@@ -42,6 +43,11 @@ func (l *Logger) HTTP(instanceID string, next http.Handler, onError func(error))
 		outcome = "succeeded"
 		if rw.status >= 400 {
 			outcome = "rejected"
+		} else if ctx.Err() != nil {
+			outcome, cause = "canceled", "request_canceled"
+			if ctx.Err() == context.DeadlineExceeded {
+				cause = "request_deadline_exceeded"
+			}
 		}
 		if rw.ioFailed {
 			outcome = "failed"

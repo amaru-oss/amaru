@@ -2,7 +2,9 @@ package operational
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/rluders/amaru/services/platform/internal/adapter/localauth"
 	"io"
@@ -12,7 +14,90 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestHTTPCancellationDiagnostics(t *testing.T) {
+	const secret = "private-cancellation-cause"
+	for _, deadline := range []bool{false, true} {
+		for _, status := range []int{http.StatusOK, http.StatusNoContent, http.StatusForbidden, http.StatusInternalServerError} {
+			t.Run(fmt.Sprintf("deadline=%t/status=%d", deadline, status), func(t *testing.T) {
+				var output bytes.Buffer
+				logger, _ := New(&output)
+				ctx, cancel := context.WithCancelCause(context.Background())
+				defer cancel(nil)
+				wantCause := "request_canceled"
+				if deadline {
+					var stop context.CancelFunc
+					ctx, stop = context.WithDeadlineCause(ctx, time.Now().Add(-time.Second), errors.New(secret))
+					defer stop()
+					wantCause = "request_deadline_exceeded"
+				}
+				handler := logger.HTTP("instance", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(status)
+					cancel(errors.New(secret))
+				}), func(err error) { t.Error(err) })
+				response := httptest.NewRecorder()
+				handler.ServeHTTP(response, httptest.NewRequest("GET", "/?code=private-query", nil).WithContext(ctx))
+				recs := records(t, &output)
+				wantOutcome := "canceled"
+				if status >= 400 {
+					wantOutcome, wantCause = "rejected", ""
+				}
+				if len(recs) != 1 || recs[0]["outcome"] != wantOutcome || recs[0]["status"] != float64(status) || response.Code != status {
+					t.Fatalf("response %d, records %v", response.Code, recs)
+				}
+				if cause, _ := recs[0]["cause"].(string); cause != wantCause {
+					t.Fatalf("cause %q, want %q", cause, wantCause)
+				}
+				if recs[0]["instanceId"] != "instance" || recs[0]["correlationId"] == "" || strings.Contains(output.String(), secret) || strings.Contains(output.String(), "private-query") {
+					t.Fatal("lost trusted identity or exposed request/cancellation data")
+				}
+			})
+		}
+	}
+}
+
+func TestHTTPClientDisconnectDiagnostic(t *testing.T) {
+	var output, serverErrors bytes.Buffer
+	logger, _ := New(&output)
+	started := make(chan struct{})
+	server := httptest.NewUnstartedServer(logger.HTTP("instance", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		<-r.Context().Done()
+	}), func(err error) { t.Error(err) }))
+	server.Config.ErrorLog = log.New(&serverErrors, "", 0)
+	server.Start()
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	request, _ := http.NewRequestWithContext(ctx, "GET", server.URL+"/?code=private-query", nil)
+	done := make(chan error, 1)
+	go func() {
+		response, err := server.Client().Do(request)
+		if response != nil {
+			response.Body.Close()
+		}
+		done <- err
+	}()
+	select {
+	case <-started:
+	case <-ctx.Done():
+		t.Fatal("request did not reach handler")
+	}
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("client error: %v", err)
+	}
+	server.Close()
+	recs := records(t, &output)
+	if len(recs) != 1 || recs[0]["outcome"] != "canceled" || recs[0]["cause"] != "request_canceled" || recs[0]["correlationId"] == "" {
+		t.Fatalf("disconnect diagnostic: %v", recs)
+	}
+	if serverErrors.Len() != 0 || strings.Contains(output.String(), "private-query") {
+		t.Fatal("raw HTTP diagnostic escaped")
+	}
+}
 
 func TestHTTPRecoveredHeaderPanicStatus(t *testing.T) {
 	for _, invalid := range []int{99, 1000} {
