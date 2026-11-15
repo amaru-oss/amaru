@@ -224,3 +224,5 @@ compiles/vets this opt-in test; `make platform-test-pg` runs it. See the
 [Linux evidence and limits](../validation/m3/2026-11-15-linux-http-postgres-lifecycle.md).
 This is component integration with real PostgreSQL and loopback HTTP, not
 production bootstrap, process/server restart or product Event delivery.
+
+The same test includes `ordinary` and `forced` subtests. The forced case observes a real settings upsert blocked by a separate PostgreSQL transaction before shutdown. It checks deadline failure, canceled write, retained prior settings, resource joins and fresh-owner credential rotation. The shared test cleanup budget exceeds the unchanged five-second HTTP drain cap; this does not exercise aggregate cleanup exhaustion or process exit. See the [forced-drain evidence](../validation/m3/2026-11-15-linux-http-postgres-forced-drain.md).
