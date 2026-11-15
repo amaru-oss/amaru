@@ -36,6 +36,7 @@ Local Linux checks (not hosted CI):
 - `go test -race -count=20 -run '^TestLifecycle(DeadlineDiagnostics|DiagnosticComposition|FailuresAndIntentionalCancellation|WatchdogBoundsUncooperativeStartup)$' ./internal/platform`: PASS, exit 0.
 - `go test -race -count=20 -run '^TestLifecycle' ./internal/platform`: PASS, exit 0, including the final nil/unbuffered/full queue regression; no skips.
 - `make check`: PASS, exit 0; 348 TypeScript contract tests, 346 matching Go/TypeScript fixture outcomes, 48 SDK tests and the default Platform suites. PostgreSQL-tagged and non-Linux code is vetted, not runtime-tested.
+- After merging current `main` at `d01934e` (approved PR #379's M4 self-development roadmap marker), `make check` on merged working commit `6211ec0`: PASS, exit 0, same checks and counts. `git merge-base --is-ancestor origin/main HEAD`: PASS, exit 0. The sync preserves shared history and carries only the three existing planning-document changes.
 - `git diff --check`: PASS, exit 0.
 - `trail check --base b3a0784`: exit 1, one lexical README conflict with Ricardo's admission-before-cancellation learning. This change only adds deadline diagnostics after teardown; `context.WithoutCancel`, the readiness latch and ordered forwarding of cancellation are unchanged. The passing admission/lifetime/rollback race tests cover those invariants. Other matches are advisory, not failures.
 
@@ -45,7 +46,8 @@ it was not a code-test failure. Final validation must include the complete file.
 
 Environment: Linux `7.2.11-100.fc43.x86_64`, amd64; module-selected Go 1.27.0;
 Node 25.7.0; pnpm 11.5.0. Local logs:
-`/tmp/amaru-after421-race.log` and `/tmp/amaru-after421-check.log`.
+`/tmp/amaru-after421-race.log`, `/tmp/amaru-after421-check.log` and
+`/tmp/amaru-after421-synced-check.log`.
 
 ## Limits
 
