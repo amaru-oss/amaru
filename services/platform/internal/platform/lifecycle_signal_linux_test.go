@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -19,18 +20,26 @@ import (
 // Signal delivery must target an isolated process, never the shared test runner.
 func TestLifecycleSignals(t *testing.T) {
 	if mode := os.Getenv("AMARU_SIGNAL_CHILD"); mode != "" {
+		phase, mode, ok := strings.Cut(mode, "/")
+		if !ok {
+			t.Fatal("missing signal phase")
+		}
 		l, err := NewLifecycle(time.Now().Add(3*time.Second), time.Second, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		go func() {
+			if phase != "ready" {
+				return
+			}
 			for !l.Ready() {
 				time.Sleep(time.Millisecond)
 			}
-			_, _ = io.WriteString(os.Stdout, "ready\n")
+			_, _ = io.WriteString(os.Stdout, "signal\n")
 		}()
 		joined := make(chan struct{})
-		var closedOnCancel atomic.Bool
+		var closedOnCancel, laterStarted atomic.Bool
+		readinessJoined := make(chan struct{})
 		order := make(chan int, 2)
 		boom := errors.New("unregistered-signal-cleanup-fixture")
 		err = l.Run(context.Background(), []lane.Runner{dependent{
@@ -42,12 +51,26 @@ func TestLifecycleSignals(t *testing.T) {
 				close(joined)
 				return nil
 			},
+			ready: func(ctx context.Context) error {
+				defer close(readinessJoined)
+				if phase == "startup" {
+					_, _ = io.WriteString(os.Stdout, "signal\n")
+					<-ctx.Done()
+					return ctx.Err()
+				}
+				return nil
+			},
 			stop: func(ctx context.Context) error {
 				if l.Ready() || ctx.Err() != nil {
 					return errors.New("invalid signal cleanup context or admission")
 				}
 				select {
 				case <-joined:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+				select {
+				case <-readinessJoined:
 				case <-ctx.Done():
 					return ctx.Err()
 				}
@@ -60,7 +83,16 @@ func TestLifecycleSignals(t *testing.T) {
 				}
 				return nil
 			},
+		}}, []lane.Runner{dependent{
+			start: func(ctx context.Context) error {
+				laterStarted.Store(true)
+				<-ctx.Done()
+				return nil
+			},
 		}})
+		if laterStarted.Load() != (phase == "ready") {
+			t.Fatal("dependent stage started before startup readiness")
+		}
 		var panicErr *lane.PanicError
 		if (err == nil) != (mode == "clean") || (mode == "error" && !errors.Is(err, boom)) ||
 			(mode == "panic" && !errors.As(err, &panicErr)) || l.Ready() || !closedOnCancel.Load() {
@@ -76,12 +108,13 @@ func TestLifecycleSignals(t *testing.T) {
 		os.Exit(0)
 	}
 	for _, signal := range []syscall.Signal{syscall.SIGINT, syscall.SIGTERM} {
-		for _, mode := range []string{"clean", "error", "panic"} {
-			t.Run(signal.String()+"/"+mode, func(t *testing.T) {
+		for _, scenario := range []string{"ready/clean", "ready/error", "ready/panic", "startup/clean", "startup/error", "startup/panic"} {
+			_, mode, _ := strings.Cut(scenario, "/")
+			t.Run(signal.String()+"/"+scenario, func(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestLifecycleSignals$")
-				cmd.Env = append(os.Environ(), "AMARU_SIGNAL_CHILD="+mode)
+				cmd.Env = append(os.Environ(), "AMARU_SIGNAL_CHILD="+scenario)
 				var stderr bytes.Buffer
 				cmd.Stderr = &stderr
 				stdout, err := cmd.StdoutPipe()
@@ -93,10 +126,10 @@ func TestLifecycleSignals(t *testing.T) {
 				}
 				reader := bufio.NewReader(stdout)
 				line, readErr := reader.ReadString('\n')
-				if readErr != nil || line != "ready\n" || cmd.Process.Signal(signal) != nil {
+				if readErr != nil || line != "signal\n" || cmd.Process.Signal(signal) != nil {
 					cancel()
 					_ = cmd.Wait()
-					t.Fatal("child did not reach readiness or receive signal")
+					t.Fatal("child did not reach signal checkpoint or receive signal")
 				}
 				out, readErr := io.ReadAll(reader)
 				err = cmd.Wait()
