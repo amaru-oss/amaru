@@ -196,3 +196,17 @@ covers Attach/Get/List retaining the original human through storage and inspecti
 rechecks, refusing replacement identities and preserving an already committed
 attach. These are fake-backed unit tests, without atomic authorization/commit or
 new public contracts.
+
+## PostgreSQL execution lifecycle composition
+
+From `services/platform`, with a disposable `AMARU_TEST_PG` server, run
+`go test -race -count=1 -tags pg -run '^TestPostgresExecutionShutdownAndRecovery$' -v ./internal/platform`.
+The test composes actual Storage/Schema/Recovery/Session/EmbeddedWorker owners
+under Lifecycle with a fake Runner. It checks pool retention through attempt
+cleanup, no shutdown Result or durable mutation, ordinary interruption versus
+idempotent requeue, stable repeated recovery and a new fenced attempt preserving
+its idempotency key. Default `make check` compiles/vets this opt-in test;
+`make platform-test-pg` runs it. See the [Linux evidence and limits](../validation/m3/2026-11-15-linux-execution-postgres-lifecycle.md).
+Owner recreation against a live PostgreSQL server is integration evidence;
+process/server restart, real Provider behavior and production bootstrap remain
+separate acceptance gates.

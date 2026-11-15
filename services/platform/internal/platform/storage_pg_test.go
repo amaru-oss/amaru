@@ -22,7 +22,8 @@ import (
 
 var databaseSequence atomic.Int64
 
-func TestPostgresStorageSchemaLifecycle(t *testing.T) {
+func lifecycleDatabase(t *testing.T) *pgx.ConnConfig {
+	t.Helper()
 	dsn := os.Getenv("AMARU_TEST_PG")
 	if dsn == "" {
 		t.Skip("AMARU_TEST_PG is not set")
@@ -32,22 +33,31 @@ func TestPostgresStorageSchemaLifecycle(t *testing.T) {
 		t.Fatal("invalid disposable PostgreSQL configuration")
 	}
 	admin := sql.OpenDB(stdlib.GetConnector(*config))
-	defer admin.Close()
+	t.Cleanup(func() { admin.Close() })
 	name := fmt.Sprintf("amaru_lifecycle_%d_%d", os.Getpid(), databaseSequence.Add(1))
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 	identifier := pgx.Identifier{name}.Sanitize()
 	if _, err := admin.ExecContext(ctx, "CREATE DATABASE "+identifier); err != nil {
 		t.Fatal("could not create disposable database")
 	}
-	defer func() {
+	t.Cleanup(func() {
 		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if _, err := admin.ExecContext(cleanup, "DROP DATABASE "+identifier+" WITH (FORCE)"); err != nil {
 			t.Error("could not drop disposable database")
 		}
-	}()
+	})
 	config.Database = name
+	return config
+}
+
+func TestPostgresStorageSchemaLifecycle(t *testing.T) {
+	config := lifecycleDatabase(t)
+	admin := sql.OpenDB(stdlib.GetConnector(*config))
+	defer admin.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	wantFailure := errors.New("later startup stage failed")
 	project := domain.Project{Key: "id:01ARZ3NDEKTSV4RRFFQ69G5FAV", Name: "retained", CreatedAt: time.Now().UTC()}
 	var recovered domain.Execution
