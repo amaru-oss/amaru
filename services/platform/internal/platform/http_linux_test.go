@@ -228,15 +228,12 @@ func TestHTTPDiscoveryAdmissionAndProductAuthentication(t *testing.T) {
 	// HTTP and Lane producers have joined; only this composition caller closes/drains.
 	close(queue)
 	trusted := operational.WithIdentity(context.Background(), operational.Identity{InstanceID: "test-instance", CorrelationID: "trusted-lifecycle"})
-	lifecycleCount := 0
-	for record := range queue {
-		lifecycleCount++
-		if err := h.config.Logger.Write(trusted, record); err != nil {
-			t.Fatal("lifecycle diagnostic write failed")
-		}
-	}
+	lifecycleCount := len(queue)
 	if lifecycleCount == 0 || lifecycleCount == cap(queue) {
 		t.Fatal("missing lifecycle diagnostics or insufficient queue capacity")
+	}
+	if err := h.config.Logger.ConsumeLifecycle(trusted, queue); err != nil {
+		t.Fatal("lifecycle diagnostic consumer failed")
 	}
 	for _, secret := range []string{info.AdministratorSecret, launch.Code, cookies[0].Value, session.CSRF,
 		"opaque-query-fixture", "opaque-body-fixture", "opaque-bearer-fixture", "opaque-cookie-fixture", "untrusted-correlation-fixture"} {

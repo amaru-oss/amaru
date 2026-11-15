@@ -108,6 +108,13 @@ func TestLaneFailuresUseSafeLifecycleHandoff(t *testing.T) {
 		queue := make(chan Record, 32)
 		l := lane.New(lane.WithLogger(slog.New(LifecycleHandler(queue))))
 		l.AddStage(failingLifecycleRunner{panic: panics})
+		var sink bytes.Buffer
+		logger, _ := New(&sink)
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		ctx = WithIdentity(ctx, Identity{InstanceID: "instance", CorrelationID: "lifecycle"})
+		consumed := make(chan error, 1)
+		go func() { consumed <- logger.ConsumeLifecycle(ctx, queue) }()
 		done := make(chan error, 1)
 		go func() { done <- l.Run(context.Background()) }()
 		select {
@@ -120,15 +127,15 @@ func TestLaneFailuresUseSafeLifecycleHandoff(t *testing.T) {
 		case <-time.After(3 * time.Second):
 			t.Fatal("Lane failure did not settle")
 		}
-		var sink bytes.Buffer
-		logger, _ := New(&sink)
-		ctx := WithIdentity(context.Background(), Identity{InstanceID: "instance", CorrelationID: "lifecycle"})
 		close(queue) // Run and all diagnostic producers have joined.
+		if err := <-consumed; err != nil {
+			t.Fatal("lifecycle consumer failed")
+		}
 		var foundError bool
-		for rec := range queue {
-			foundError = foundError || rec.Outcome == "error"
-			if err := logger.Write(ctx, rec); err != nil {
-				t.Fatal(err)
+		for _, rec := range records(t, &sink) {
+			foundError = foundError || rec["outcome"] == "error"
+			if rec["instanceId"] != "instance" || rec["correlationId"] != "lifecycle" || rec["operation"] != "process.lifecycle" {
+				t.Fatal("missing trusted lifecycle identity")
 			}
 		}
 		if !foundError || strings.Contains(sink.String(), "unregistered-lifecycle-secret") || strings.Contains(sink.String(), "stack") {
