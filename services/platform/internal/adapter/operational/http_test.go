@@ -3,6 +3,7 @@ package operational
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"github.com/rluders/amaru/services/platform/internal/adapter/localauth"
 	"io"
 	"log"
@@ -12,6 +13,58 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestHTTPRecoveredHeaderPanicStatus(t *testing.T) {
+	for _, invalid := range []int{99, 1000} {
+		for _, completion := range []string{"header", "write", "flush"} {
+			t.Run(fmt.Sprintf("%d/%s", invalid, completion), func(t *testing.T) {
+				var output, serverErrors bytes.Buffer
+				logger, _ := New(&output)
+				server := httptest.NewUnstartedServer(logger.HTTP("instance", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					func() {
+						defer func() {
+							if recover() == nil {
+								t.Error("invalid status did not panic")
+							}
+						}()
+						w.WriteHeader(invalid)
+					}()
+					switch completion {
+					case "header":
+						w.WriteHeader(http.StatusNoContent)
+					case "write":
+						_, _ = w.Write([]byte("private-response-body"))
+					case "flush":
+						if err := http.NewResponseController(w).Flush(); err != nil {
+							t.Error(err)
+						}
+					}
+				}), func(err error) { t.Error(err) }))
+				server.Config.ErrorLog = log.New(&serverErrors, "", 0)
+				server.Start()
+				defer server.Close()
+				res, err := server.Client().Get(server.URL + "/?token=private-query")
+				if err != nil {
+					t.Fatal(err)
+				}
+				_, _ = io.Copy(io.Discard, res.Body)
+				res.Body.Close()
+				server.Close()
+				want := http.StatusOK
+				if completion == "header" {
+					want = http.StatusNoContent
+				}
+				recs := records(t, &output)
+				if len(recs) != 1 || res.StatusCode != want || recs[0]["status"] != float64(want) || recs[0]["outcome"] != "succeeded" || recs[0]["correlationId"] == "" {
+					t.Fatalf("wire status %d, diagnostic %v, want %d", res.StatusCode, recs, want)
+				}
+				if serverErrors.Len() != 0 || strings.Contains(output.String(), "private-response-body") || strings.Contains(output.String(), "private-query") {
+					t.Fatal("raw HTTP diagnostic escaped")
+				}
+			})
+		}
+	}
+}
 
 func TestHTTPInformationalAndUpgradeStatus(t *testing.T) {
 	for _, tc := range []struct {

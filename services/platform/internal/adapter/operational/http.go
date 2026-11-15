@@ -65,9 +65,10 @@ func (w *response) WriteHeader(status int) {
 		return
 	}
 	if !w.wrote {
+		// A rejected header can panic; leave status open for handler recovery.
+		w.ResponseWriter.WriteHeader(status)
 		w.status = status
 		w.wrote = true
-		w.ResponseWriter.WriteHeader(status)
 	}
 }
 func (w *response) Write(p []byte) (int, error) {
