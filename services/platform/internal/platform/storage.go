@@ -42,6 +42,13 @@ func (s *Storage) initialize(ctx context.Context) error {
 	s.db = sql.OpenDB(s.connector)
 	s.initErr = s.db.PingContext(ctx)
 	if s.initErr == nil {
+		var version int
+		s.initErr = s.db.QueryRowContext(ctx, "SHOW server_version_num").Scan(&version)
+		if s.initErr == nil && version < 160000 {
+			s.initErr = errors.New("storage requires PostgreSQL 16 or newer")
+		}
+	}
+	if s.initErr == nil {
 		s.initErr = ctx.Err()
 	}
 	return s.initErr

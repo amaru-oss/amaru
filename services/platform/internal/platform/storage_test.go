@@ -2,8 +2,10 @@ package platform
 
 import (
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -17,11 +19,12 @@ import (
 )
 
 type fakeConnector struct {
-	opens  atomic.Int32
-	closes atomic.Int32
-	ping   func(context.Context) error
-	query  func(context.Context) error
-	close  func() error
+	opens   atomic.Int32
+	closes  atomic.Int32
+	ping    func(context.Context) error
+	query   func(context.Context) error
+	version func(context.Context) (driver.Rows, error)
+	close   func() error
 }
 
 func (f *fakeConnector) Connect(context.Context) (driver.Conn, error) {
@@ -53,7 +56,13 @@ func (c fakeConnection) Ping(ctx context.Context) error {
 	}
 	return ctx.Err()
 }
-func (c fakeConnection) QueryContext(ctx context.Context, _ string, _ []driver.NamedValue) (driver.Rows, error) {
+func (c fakeConnection) QueryContext(ctx context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
+	if query == "SHOW server_version_num" {
+		if c.f.version != nil {
+			return c.f.version(ctx)
+		}
+		return &versionRows{value: "180000"}, nil
+	}
 	if c.f.query != nil {
 		return nil, c.f.query(ctx)
 	}
@@ -399,6 +408,131 @@ func TestDriverPanicFailsClosed(t *testing.T) {
 			out, err := cmd.CombinedOutput()
 			if err != nil || strings.Contains(string(out), "unregistered-driver-secret") {
 				t.Fatal("bounded driver panic subprocess failed or leaked diagnostics")
+			}
+		})
+	}
+}
+
+// PostgreSQL returns SHOW values as text, including server_version_num.
+type versionRows struct {
+	value driver.Value
+	done  bool
+}
+
+func (*versionRows) Columns() []string { return []string{"server_version_num"} }
+func (*versionRows) Close() error      { return nil }
+func (r *versionRows) Next(values []driver.Value) error {
+	if r.done {
+		return io.EOF
+	}
+	r.done = true
+	values[0] = r.value
+	return nil
+}
+
+func TestStoragePostgresVersionGate(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		value    driver.Value
+		accepted bool
+	}{
+		{"15", "150020", false},
+		{"16", "160000", true},
+		{"17", "170012", true},
+		{"18", "180007", true},
+		{"malformed", "unregistered-version-fixture", false},
+		{"null", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := &fakeConnector{version: func(context.Context) (driver.Rows, error) {
+				return &versionRows{value: tc.value}, nil
+			}}
+			s := newStorage(t, f)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var admitted atomic.Bool
+			l := newLane()
+			l.AddStage(s)
+			l.AddStage(dependent{ready: func(ctx context.Context) error {
+				if _, err := s.DB(ctx); err != nil {
+					return err
+				}
+				admitted.Store(true)
+				cancel()
+				return nil
+			}})
+			err := l.Run(ctx)
+			if admitted.Load() != tc.accepted || (err == nil) != tc.accepted {
+				t.Fatal("server version did not gate dependent admission")
+			}
+			if _, err := s.DB(context.Background()); (err == nil) != tc.accepted {
+				t.Fatal("pool exposure did not match version admission")
+			}
+			if f.opens.Load() != 1 || f.closes.Load() != 1 {
+				t.Fatal("version check leaked or reacquired pool connections")
+			}
+			if tc.name == "15" && s.initErr.Error() != "storage requires PostgreSQL 16 or newer" {
+				t.Fatal("unsupported version did not explain minimum requirement")
+			}
+		})
+	}
+}
+
+func TestStorageVersionQueryFailureAndDeadline(t *testing.T) {
+	failure := errors.New("version query failed")
+	for _, mode := range []string{"error", "deadline", "cancel", "no rows"} {
+		t.Run(mode, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			entered := make(chan struct{})
+			f := &fakeConnector{version: func(ctx context.Context) (driver.Rows, error) {
+				close(entered)
+				switch mode {
+				case "deadline", "cancel":
+					if mode == "cancel" {
+						cancel()
+					}
+					<-ctx.Done()
+					return nil, ctx.Err()
+				case "no rows":
+					return &versionRows{done: true}, nil
+				default:
+					return nil, failure
+				}
+			}}
+			s, _ := NewStorage(f, time.Now().Add(50*time.Millisecond))
+			var admitted atomic.Bool
+			l := newLane()
+			l.AddStage(s)
+			schema, _ := NewSchema(s)
+			l.AddStage(schema)
+			l.AddStage(dependent{ready: func(context.Context) error { admitted.Store(true); return nil }})
+			done := make(chan error, 1)
+			go func() { done <- l.Run(ctx) }()
+			err := result(t, done)
+			select {
+			case <-entered:
+			default:
+				t.Fatal("storage did not query server version")
+			}
+			if (err == nil) != (mode == "cancel") || admitted.Load() {
+				t.Fatal("version query failure admitted later stages or lost lifecycle outcome")
+			}
+			want := failure
+			if mode == "deadline" {
+				want = context.DeadlineExceeded
+			}
+			if mode == "cancel" {
+				want = context.Canceled
+			}
+			if mode == "no rows" {
+				want = sql.ErrNoRows
+			}
+			if !errors.Is(s.initErr, want) {
+				t.Fatal("lost version query failure")
+			}
+			if _, err := s.DB(context.Background()); err == nil || f.closes.Load() != 1 {
+				t.Fatal("failed version query exposed or leaked pool")
 			}
 		})
 	}
