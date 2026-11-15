@@ -513,11 +513,14 @@ func TestHTTPPrerequisiteFailureAcquiresNothing(t *testing.T) {
 }
 
 func TestHTTPBoundedShutdownCancelsAndPreservesPublicationUntilJoin(t *testing.T) {
-	l, _ := NewLifecycle(time.Now().Add(time.Second), 75*time.Millisecond, nil)
+	queue := make(chan operational.Record, 128)
+	l, _ := NewLifecycle(time.Now().Add(time.Second), 75*time.Millisecond, queue)
 	dir := filepath.Join(t.TempDir(), "state")
 	entered, cancelled, release, exited := make(chan struct{}), make(chan struct{}), make(chan struct{}), make(chan struct{})
-	h, _ := httpOwner(t, dir, l, func(*localauth.Auth) (http.Handler, error) {
+	identity := make(chan operational.Identity, 1)
+	h, logs := httpOwner(t, dir, l, func(*localauth.Auth) (http.Handler, error) {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			identity <- operational.IdentityFrom(r.Context())
 			defer close(exited)
 			close(entered)
 			<-r.Context().Done()
@@ -525,14 +528,16 @@ func TestHTTPBoundedShutdownCancelsAndPreservesPublicationUntilJoin(t *testing.T
 			<-release
 		}), nil
 	})
+	h.config.OnLogError = func(error) { t.Error("safe shutdown diagnostic write failed") }
 	cancel, done := startHTTP(t, h)
 	info := readyHTTP(t, h)
 	clientDone := make(chan struct{})
 	go func() {
 		defer close(clientDone)
-		req, _ := http.NewRequest("GET", info.Endpoint+"/blocked", nil)
+		req, _ := http.NewRequest("GET", info.Endpoint+"/blocked?private=shutdown-query-fixture", nil)
 		req.Header.Set("Authorization", "Bearer "+info.AdministratorSecret)
-		client := &http.Client{Timeout: time.Second}
+		req.Header.Set("X-Correlation-ID", "shutdown-correlation-fixture")
+		client := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}, Timeout: time.Second}
 		resp, err := client.Do(req)
 		if err == nil {
 			resp.Body.Close()
@@ -557,6 +562,48 @@ func TestHTTPBoundedShutdownCancelsAndPreservesPublicationUntilJoin(t *testing.T
 	h.auth.Close()
 	if err := h.publication.Close(); err != nil {
 		t.Fatal("test cleanup failed")
+	}
+
+	// Both producers have joined; drain diagnostics before reading the shared sink.
+	close(queue)
+	trusted := operational.WithIdentity(context.Background(), operational.Identity{InstanceID: "test-instance", CorrelationID: "shutdown-lifecycle"})
+	lifecycleCount := len(queue)
+	if lifecycleCount == 0 || lifecycleCount == cap(queue) {
+		t.Fatal("missing lifecycle diagnostics or insufficient queue capacity")
+	}
+	if err := h.config.Logger.ConsumeLifecycle(trusted, queue); err != nil {
+		t.Fatal("lifecycle diagnostic consumer failed")
+	}
+	for _, secret := range []string{info.AdministratorSecret, "shutdown-query-fixture", "shutdown-correlation-fixture"} {
+		if secret == "" || strings.Contains(logs.String(), secret) {
+			t.Fatal("credential or untrusted request data leaked to shutdown diagnostics")
+		}
+	}
+	requestIdentity := <-identity
+	httpCount := 0
+	for _, line := range bytes.Split(bytes.TrimSpace(logs.Bytes()), []byte("\n")) {
+		var record map[string]any
+		if json.Unmarshal(line, &record) != nil || record["instanceId"] != "test-instance" {
+			t.Fatal("invalid shutdown JSON or missing trusted Instance identity")
+		}
+		switch record["operation"] {
+		case "process.lifecycle":
+			if record["correlationId"] != "shutdown-lifecycle" || len(record) != 5 {
+				t.Fatal("unsafe lifecycle shutdown record")
+			}
+			lifecycleCount--
+		case "http.request":
+			httpCount++
+			if len(record) != 7 || record["outcome"] != "canceled" || record["cause"] != "request_canceled" || record["status"] != float64(http.StatusOK) ||
+				requestIdentity.CorrelationID == "" || record["correlationId"] != requestIdentity.CorrelationID {
+				t.Fatal("shutdown cancellation diagnostic missing or lost request correlation")
+			}
+		default:
+			t.Fatal("unexpected shutdown diagnostic")
+		}
+	}
+	if httpCount != 1 || lifecycleCount != 0 {
+		t.Fatal("shutdown diagnostics missing or duplicated")
 	}
 }
 
