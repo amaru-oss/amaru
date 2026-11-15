@@ -19,7 +19,8 @@ type InspectedProject struct {
 // AttachProject authorizes before inspection and immediately before atomic registration.
 // A committed registration is retained even if authority is lost before returning it.
 func (a *ProjectAccess) AttachProject(ctx context.Context, root string, inspector ports.ProjectInspector) (InspectedProject, bool, error) {
-	if _, err := a.administrator(ctx); err != nil {
+	by, err := a.administrator(ctx)
+	if err != nil {
 		return InspectedProject{}, false, err
 	}
 	store, ok := a.projects.(ports.ProjectCloneStore)
@@ -27,7 +28,7 @@ func (a *ProjectAccess) AttachProject(ctx context.Context, root string, inspecto
 		return InspectedProject{}, false, domain.ErrInvalid
 	}
 	inspected, inspectErr := inspector.Inspect(ctx, root)
-	if _, err := a.administrator(ctx); err != nil {
+	if err := a.checkAdministrator(ctx, by.ID); err != nil {
 		return InspectedProject{}, false, err
 	}
 	if inspectErr != nil {
@@ -37,11 +38,11 @@ func (a *ProjectAccess) AttachProject(ctx context.Context, root string, inspecto
 	if err := p.Validate(); err != nil {
 		return InspectedProject{}, false, err
 	}
-	if _, err := a.administrator(ctx); err != nil {
+	if err := a.checkAdministrator(ctx, by.ID); err != nil {
 		return InspectedProject{}, false, err
 	}
 	p, created, err := store.RegisterClone(ctx, p, domain.ProjectClone{ProjectKey: p.Key, Root: inspected.Root})
-	if _, authErr := a.administrator(ctx); authErr != nil {
+	if authErr := a.checkAdministrator(ctx, by.ID); authErr != nil {
 		return InspectedProject{}, false, authErr
 	}
 	if errors.Is(err, domain.ErrExists) {
@@ -55,14 +56,15 @@ func (a *ProjectAccess) AttachProject(ctx context.Context, root string, inspecto
 
 // Project captures exactly one binding; a changed or unavailable clone never falls back.
 func (a *ProjectAccess) Project(ctx context.Context, key domain.ProjectKey, inspector ports.ProjectInspector) (InspectedProject, error) {
-	if _, err := a.administrator(ctx); err != nil {
+	by, err := a.administrator(ctx)
+	if err != nil {
 		return InspectedProject{}, err
 	}
 	if !key.Valid() {
 		return InspectedProject{}, domain.ErrNotFound
 	}
 	p, err := a.projects.Get(ctx, key)
-	if _, authErr := a.administrator(ctx); authErr != nil {
+	if authErr := a.checkAdministrator(ctx, by.ID); authErr != nil {
 		return InspectedProject{}, authErr
 	}
 	if err != nil {
@@ -71,16 +73,17 @@ func (a *ProjectAccess) Project(ctx context.Context, key domain.ProjectKey, insp
 	if p.Key != key {
 		return InspectedProject{}, domain.ErrNotFound
 	}
-	return a.inspectProject(ctx, p, inspector)
+	return a.inspectProject(ctx, p, inspector, by.ID)
 }
 
 // Projects returns all attached Projects sorted by stored name, then key, or no results.
 func (a *ProjectAccess) Projects(ctx context.Context, inspector ports.ProjectInspector) ([]InspectedProject, error) {
-	if _, err := a.administrator(ctx); err != nil {
+	by, err := a.administrator(ctx)
+	if err != nil {
 		return nil, err
 	}
 	projects, err := a.projects.List(ctx)
-	if _, authErr := a.administrator(ctx); authErr != nil {
+	if authErr := a.checkAdministrator(ctx, by.ID); authErr != nil {
 		return nil, authErr
 	}
 	if err != nil {
@@ -88,7 +91,7 @@ func (a *ProjectAccess) Projects(ctx context.Context, inspector ports.ProjectIns
 	}
 	result := make([]InspectedProject, 0, len(projects))
 	for _, p := range projects {
-		inspected, err := a.inspectProject(ctx, p, inspector)
+		inspected, err := a.inspectProject(ctx, p, inspector, by.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -100,14 +103,14 @@ func (a *ProjectAccess) Projects(ctx context.Context, inspector ports.ProjectIns
 		}
 		return result[i].Project.Name < result[j].Project.Name
 	})
-	if _, err := a.administrator(ctx); err != nil {
+	if err := a.checkAdministrator(ctx, by.ID); err != nil {
 		return nil, err
 	}
 	return result, nil
 }
 
-func (a *ProjectAccess) inspectProject(ctx context.Context, p domain.Project, inspector ports.ProjectInspector) (InspectedProject, error) {
-	if _, err := a.administrator(ctx); err != nil {
+func (a *ProjectAccess) inspectProject(ctx context.Context, p domain.Project, inspector ports.ProjectInspector, humanID string) (InspectedProject, error) {
+	if err := a.checkAdministrator(ctx, humanID); err != nil {
 		return InspectedProject{}, err
 	}
 	store, ok := a.projects.(ports.ProjectCloneStore)
@@ -115,7 +118,7 @@ func (a *ProjectAccess) inspectProject(ctx context.Context, p domain.Project, in
 		return InspectedProject{}, domain.ErrInvalid
 	}
 	clone, err := store.ActiveClone(ctx, p.Key)
-	if _, authErr := a.administrator(ctx); authErr != nil {
+	if authErr := a.checkAdministrator(ctx, humanID); authErr != nil {
 		return InspectedProject{}, authErr
 	}
 	if errors.Is(err, domain.ErrNotFound) {
@@ -128,7 +131,7 @@ func (a *ProjectAccess) inspectProject(ctx context.Context, p domain.Project, in
 		return InspectedProject{}, domain.ErrConflict
 	}
 	inspected, inspectErr := inspector.Inspect(ctx, clone.Root)
-	if _, err := a.administrator(ctx); err != nil {
+	if err := a.checkAdministrator(ctx, humanID); err != nil {
 		return InspectedProject{}, err
 	}
 	if errors.Is(inspectErr, domain.ErrInvalid) {
@@ -141,4 +144,16 @@ func (a *ProjectAccess) inspectProject(ctx context.Context, p domain.Project, in
 		return InspectedProject{}, domain.ErrConflict
 	}
 	return InspectedProject{Project: p, Inspection: inspected}, nil
+}
+
+// Rechecks must retain the request's original human across storage and inspection IO.
+func (a *ProjectAccess) checkAdministrator(ctx context.Context, humanID string) error {
+	current, err := a.administrator(ctx)
+	if err != nil {
+		return err
+	}
+	if current.ID != humanID {
+		return domain.ErrNotPermitted
+	}
+	return nil
 }
