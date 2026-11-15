@@ -188,3 +188,9 @@ Event, settings and Artifact read IO, including closing denied Artifact content.
 Run `go test -race -count=100 -run '^TestProjectReadAuthorityDuringIO$' ./internal/coordinator`
 from `services/platform`. This is deterministic fake-backed unit evidence;
 it adds no public route, PostgreSQL or product acceptance claim.
+
+The [Project resource identity record](../validation/m3/2026-11-14-linux-prj-002-resource-identity.md)
+covers Attach/Get/List retaining the original human through storage and inspection
+rechecks, refusing replacement identities and preserving an already committed
+attach. These are fake-backed unit tests, without atomic authorization/commit or
+new public contracts.

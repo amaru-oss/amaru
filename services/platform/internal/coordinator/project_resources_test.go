@@ -3,6 +3,7 @@ package coordinator_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -331,6 +332,70 @@ func TestProjectResourcesRejectNonAdministrator(t *testing.T) {
 		}
 		if s.reads+s.writes != 0 {
 			t.Fatal("unauthorized store")
+		}
+	}
+}
+
+func TestProjectResourcesPreserveIdentity(t *testing.T) {
+	for operation, checkpoints := range map[string]int{"attach": 4, "get": 5, "list": 6} {
+		for changedAt := 2; changedAt <= checkpoints+1; changedAt++ {
+			t.Run(fmt.Sprintf("%s/check_%d", operation, changedAt), func(t *testing.T) {
+				ctx := context.Background()
+				key := domain.ProjectKey("ssh://github.com/acme/a#0123456789abcdef0123456789abcdef01234567")
+				s := &resourceStore{ProjectStore: fakes.NewProjectStore()}
+				if operation != "attach" {
+					_, _, err := s.ProjectStore.RegisterClone(ctx, domain.Project{Key: key, Name: "a", CreatedAt: time.Now()}, domain.ProjectClone{ProjectKey: key, Root: "/a"})
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+				calls := 0
+				api, err := coordinator.NewProjectAccess(coordinator.New(fakes.NewExecutionStore(), time.Now), s, func(context.Context) (domain.Principal, error) {
+					calls++
+					id := "original"
+					if calls >= changedAt {
+						id = "replacement"
+					}
+					return domain.Principal{Kind: domain.PrincipalHuman, Role: domain.RoleOwner, ID: id}, nil
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				inspect := inspectFunc(func(context.Context, string) (ports.ProjectInspection, error) {
+					return ports.ProjectInspection{Key: key, Name: "a", Root: "/a"}, nil
+				})
+				var result any
+				created := false
+				switch operation {
+				case "attach":
+					result, created, err = api.AttachProject(ctx, "/a", inspect)
+				case "get":
+					result, err = api.Project(ctx, key, inspect)
+				case "list":
+					result, err = api.Projects(ctx, inspect)
+				}
+				if changedAt > checkpoints {
+					if err != nil || calls != checkpoints {
+						t.Fatalf("unchanged identity: %v, checks %d", err, calls)
+					}
+					return
+				}
+				if !errors.Is(err, domain.ErrNotPermitted) || !reflect.ValueOf(result).IsZero() || created {
+					t.Fatalf("replacement identity returned %v, created %v, error %v", result, created, err)
+				}
+				wantWrites := 0
+				if operation == "attach" && changedAt == 4 {
+					wantWrites = 1 // The committed registration must survive response denial.
+				}
+				if s.writes != wantWrites {
+					t.Fatalf("registration calls %d, want %d", s.writes, wantWrites)
+				}
+				if wantWrites == 1 {
+					if clone, err := s.ProjectStore.ActiveClone(ctx, key); err != nil || clone.Root != "/a" {
+						t.Fatal("committed registration was lost", err)
+					}
+				}
+			})
 		}
 	}
 }
