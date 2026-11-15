@@ -1,14 +1,110 @@
 package platform
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/rluders/amaru/services/platform/internal/adapter/operational"
 	"github.com/rluders/lane/v2"
 )
+
+func TestLifecycleDeadlineDiagnostics(t *testing.T) {
+	for _, failure := range []string{"expired", "startup", "caller", "cancel"} {
+		t.Run(failure, func(t *testing.T) {
+			queue := make(chan operational.Record, 128)
+			deadline := time.Now().Add(2 * time.Second)
+			if failure == "expired" {
+				deadline = time.Now().Add(-time.Second)
+			} else if failure == "startup" {
+				deadline = time.Now().Add(50 * time.Millisecond)
+			}
+			l, _ := NewLifecycle(deadline, time.Second, queue)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			const secret = "unregistered-deadline-cause-fixture"
+			if failure == "caller" {
+				var stop context.CancelFunc
+				ctx, stop = context.WithTimeoutCause(ctx, 50*time.Millisecond, errors.New(secret))
+				defer stop()
+			}
+			err := l.Run(ctx, []lane.Runner{dependent{
+				start: func(ctx context.Context) error { <-ctx.Done(); return nil },
+				ready: func(ctx context.Context) error {
+					if failure == "cancel" {
+						cancel()
+					}
+					<-ctx.Done()
+					return ctx.Err()
+				},
+			}})
+			if (err == nil) != (failure == "cancel") || l.Ready() {
+				t.Fatal("deadline/cancellation classification changed")
+			}
+			if failure != "cancel" && !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatal("deadline failure lost")
+			}
+			close(queue) // Cooperative producers have joined.
+			var sink bytes.Buffer
+			logger, _ := operational.New(&sink)
+			trusted := operational.WithIdentity(context.Background(), operational.Identity{InstanceID: "instance", CorrelationID: "lifecycle"})
+			if err := logger.ConsumeLifecycle(trusted, queue); err != nil {
+				t.Fatal("diagnostic drain failed")
+			}
+			found := 0
+			for _, line := range bytes.Split(bytes.TrimSpace(sink.Bytes()), []byte("\n")) {
+				var rec map[string]any
+				if json.Unmarshal(line, &rec) != nil || rec["instanceId"] != "instance" || rec["correlationId"] != "lifecycle" || rec["operation"] != "process.lifecycle" {
+					t.Fatal("invalid JSON or lifecycle identity")
+				}
+				if rec["outcome"] == "error" {
+					want := "startup_deadline_exceeded"
+					if failure == "caller" {
+						want = "caller_deadline_exceeded"
+					}
+					if len(rec) != 6 || rec["cause"] != want {
+						t.Fatal("missing safe deadline cause")
+					}
+					found++
+				}
+			}
+			want := 1
+			if failure == "cancel" {
+				want = 0
+			}
+			if found != want || strings.Contains(sink.String(), secret) {
+				t.Fatal("missing/duplicate deadline diagnostic or custom cause leaked")
+			}
+		})
+	}
+}
+
+func TestLifecycleDeadlineDiagnosticDoesNotWaitForConsumer(t *testing.T) {
+	full := make(chan operational.Record, 1)
+	sentinel := operational.Record{Operation: "test.sentinel", Outcome: "info"}
+	full <- sentinel
+	for _, queue := range []chan operational.Record{nil, make(chan operational.Record), full} {
+		l, _ := NewLifecycle(time.Now().Add(-time.Second), time.Second, queue)
+		done := make(chan error, 1)
+		go func() { done <- l.Run(context.Background()) }()
+		select {
+		case err := <-done:
+			if !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatal("deadline failure changed")
+			}
+		case <-time.After(time.Second):
+			t.Fatal("diagnostics blocked failure return")
+		}
+	}
+	if <-full != sentinel {
+		t.Fatal("full queue contents changed")
+	}
+}
 
 func TestLifecycleWatchdogBoundsUncooperativeStartup(t *testing.T) {
 	for _, blocked := range []string{"start", "readiness", "cleanup"} {

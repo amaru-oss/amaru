@@ -40,11 +40,30 @@ func (l *Lifecycle) Ready() bool { return l.state.Load() == lifecycleReady }
 // Run returns unsafe underlying errors for classification only, never for logging.
 // The entrypoint must exit unsuccessfully on error; abandoned goroutines cannot
 // be terminated here and must never be followed by an in-process restart.
-func (l *Lifecycle) Run(ctx context.Context, stages ...[]lane.Runner) error {
+func (l *Lifecycle) Run(ctx context.Context, stages ...[]lane.Runner) (runErr error) {
 	if !l.started.CompareAndSwap(false, true) {
 		return errors.New("lifecycle already run")
 	}
 	parent := ctx
+	defer func() {
+		if runErr == nil {
+			return
+		}
+		cause := ""
+		switch {
+		case l.state.Load() == lifecycleExpired:
+			cause = "startup_deadline_exceeded"
+		case errors.Is(parent.Err(), context.DeadlineExceeded):
+			cause = "caller_deadline_exceeded"
+		default:
+			return
+		}
+		// Lane sees watchdog cancellation as intentional; do not format its error.
+		select {
+		case l.diagnostics <- operational.Record{Operation: "process.lifecycle", Outcome: "error", Cause: cause}:
+		default:
+		}
+	}()
 	// Forward caller cancellation only after closing admission.
 	ctx, cancel := context.WithCancel(context.WithoutCancel(parent))
 	defer cancel()
