@@ -28,7 +28,10 @@ type recoveryConnection struct {
 }
 
 func (c recoveryConnection) Ping(ctx context.Context) error { return ctx.Err() }
-func (c recoveryConnection) QueryContext(ctx context.Context, _ string, _ []driver.NamedValue) (driver.Rows, error) {
+func (c recoveryConnection) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+	if query == "SHOW server_version_num" {
+		return c.Conn.(driver.QueryerContext).QueryContext(ctx, query, args)
+	}
 	return c.query(ctx)
 }
 
