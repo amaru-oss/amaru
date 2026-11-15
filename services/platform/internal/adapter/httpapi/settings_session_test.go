@@ -19,6 +19,54 @@ type settingsReadHook struct {
 	after func()
 }
 
+type settingsUpdateHook struct {
+	ports.SettingsStore
+	after func()
+}
+
+func (s settingsUpdateHook) UpdateSettings(ctx context.Context, key domain.ProjectKey, patch domain.UpdateSettings) (domain.ProjectSettings, error) {
+	value, err := s.SettingsStore.UpdateSettings(ctx, key, patch)
+	s.after()
+	return value, err
+}
+
+func TestSettingsSessionLogoutDuringWrite(t *testing.T) {
+	auth, _, store := localSetup(t)
+	access, err := coordinator.NewProjectAccess(coordinator.New(fakes.NewExecutionStore(), time.Now), store.ProjectStore, auth.Principal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := func() {}
+	h, err := SettingsHandler(auth, access, settingsUpdateHook{store, func() { after() }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cookie, csrf := launch(t, auth, h)
+	otherCookie, _ := launch(t, auth, h)
+	browser := map[string]string{"Cookie": cookie, "Origin": "http://localhost:7777", "X-Amaru-CSRF": csrf}
+	after = func() {
+		if w := call(h, nil, http.MethodDelete, "/v1/auth/session", "", browser); w.Code != http.StatusNoContent {
+			t.Fatal("logout during settings write failed")
+		}
+	}
+	w := call(h, nil, http.MethodPatch, path(projectA), `{"importClaudeSkills":true}`, browser)
+	check(t, w, http.StatusForbidden, "forbidden")
+	if strings.Contains(w.Body.String(), "importClaudeSkills") || store.writes != 1 {
+		t.Fatal("revoked write returned settings or repeated mutation")
+	}
+	check(t, call(h, nil, http.MethodGet, path(projectA), "", browser), http.StatusUnauthorized, "unauthorized")
+	for _, client := range []struct {
+		key  domain.ProjectKey
+		want string
+	}{{projectA, `{"importClaudeSkills":true}`}, {projectB, `{"importClaudeSkills":false}`}} {
+		w := call(h, nil, http.MethodGet, path(client.key), "", map[string]string{"Cookie": otherCookie})
+		check(t, w, http.StatusOK, "")
+		if strings.TrimSpace(w.Body.String()) != client.want {
+			t.Fatal("response denial rolled back the commit or affected another Project/session")
+		}
+	}
+}
+
 func (s settingsReadHook) Settings(ctx context.Context, key domain.ProjectKey) (domain.ProjectSettings, error) {
 	value, err := s.SettingsStore.Settings(ctx, key)
 	s.after()
