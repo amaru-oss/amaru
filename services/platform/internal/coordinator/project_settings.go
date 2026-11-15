@@ -33,7 +33,8 @@ func (a *ProjectAccess) Settings(ctx context.Context, project domain.ProjectKey,
 
 // UpdateSettings is an unversioned partial update, not a replayable execution command.
 func (a *ProjectAccess) UpdateSettings(ctx context.Context, project domain.ProjectKey, patch domain.UpdateSettings, store ports.SettingsStore) (domain.ProjectSettings, error) {
-	if _, err := a.authorize(ctx, project); err != nil {
+	by, err := a.authorize(ctx, project)
+	if err != nil {
 		return domain.ProjectSettings{}, err
 	}
 	if err := patch.Validate(); err != nil {
@@ -42,5 +43,17 @@ func (a *ProjectAccess) UpdateSettings(ctx context.Context, project domain.Proje
 	if store == nil {
 		return domain.ProjectSettings{}, domain.ErrInvalid
 	}
-	return store.UpdateSettings(ctx, project, patch)
+	settings, err := store.UpdateSettings(ctx, project, patch)
+	if err != nil {
+		return domain.ProjectSettings{}, err
+	}
+	// A committed update remains committed if authority is lost before its response.
+	current, err := a.authorize(ctx, project)
+	if err != nil {
+		return domain.ProjectSettings{}, err
+	}
+	if current.ID != by.ID {
+		return domain.ProjectSettings{}, domain.ErrNotPermitted
+	}
+	return settings, nil
 }
