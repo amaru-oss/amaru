@@ -210,3 +210,17 @@ its idempotency key. Default `make check` compiles/vets this opt-in test;
 Owner recreation against a live PostgreSQL server is integration evidence;
 process/server restart, real Provider behavior and production bootstrap remain
 separate acceptance gates.
+
+## PostgreSQL HTTP lifecycle composition
+
+On Linux, from `services/platform` with a disposable `AMARU_TEST_PG` server, run
+`go test -race -count=1 -tags pg -run '^TestPostgresHTTPWriteDrainsBeforeStorageCloses$' -v ./internal/platform`.
+The test composes Storage/Schema/Recovery/HTTP under Lifecycle and uses the
+existing authorized Project settings handler. It checks closed admission and
+retained pool/publication during an in-flight write, successful commit through
+ordinary request drain, resource closure after joins, and durable reads with
+rotated credentials on fresh owner startup. Default Linux `make check`
+compiles/vets this opt-in test; `make platform-test-pg` runs it. See the
+[Linux evidence and limits](../validation/m3/2026-11-15-linux-http-postgres-lifecycle.md).
+This is component integration with real PostgreSQL and loopback HTTP, not
+production bootstrap, process/server restart or product Event delivery.
