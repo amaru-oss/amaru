@@ -25,7 +25,8 @@ func TestLifecycleSignals(t *testing.T) {
 			t.Fatal("missing signal phase")
 		}
 		shutdown := time.Second
-		if mode == "timeout" {
+		budgetFailure := strings.HasSuffix(mode, "timeout")
+		if budgetFailure {
 			shutdown = 100 * time.Millisecond
 		}
 		l, err := NewLifecycle(time.Now().Add(3*time.Second), shutdown, nil)
@@ -51,7 +52,7 @@ func TestLifecycleSignals(t *testing.T) {
 		err = l.Run(context.Background(), []lane.Runner{dependent{
 			stop: func(ctx context.Context) error {
 				order <- 1
-				if mode == "timeout" {
+				if budgetFailure {
 					deadline, ok := ctx.Deadline()
 					lateBudgetValid <- ok && deadline.Equal(<-cleanupDeadline) && errors.Is(ctx.Err(), context.DeadlineExceeded)
 				}
@@ -68,6 +69,9 @@ func TestLifecycleSignals(t *testing.T) {
 				defer close(readinessJoined)
 				if phase == "startup" {
 					_, _ = io.WriteString(os.Stdout, "signal\n")
+					if mode == "readiness-timeout" {
+						select {}
+					}
 					<-ctx.Done()
 					return ctx.Err()
 				}
@@ -77,25 +81,27 @@ func TestLifecycleSignals(t *testing.T) {
 				if l.Ready() || ctx.Err() != nil {
 					return errors.New("invalid signal cleanup context or admission")
 				}
+				if budgetFailure {
+					deadline, _ := ctx.Deadline()
+					cleanupDeadline <- deadline
+				}
 				select {
 				case <-joined:
 				case <-ctx.Done():
 					return ctx.Err()
 				}
+				order <- 2
 				select {
 				case <-readinessJoined:
 				case <-ctx.Done():
 					return ctx.Err()
 				}
-				order <- 2
 				switch mode {
 				case "error":
 					return boom
 				case "panic":
 					panic("unregistered-signal-panic-fixture")
 				case "timeout":
-					deadline, _ := ctx.Deadline()
-					cleanupDeadline <- deadline
 					select {}
 				}
 				return nil
@@ -115,7 +121,7 @@ func TestLifecycleSignals(t *testing.T) {
 			(mode == "panic" && !errors.As(err, &panicErr)) || l.Ready() || !closedOnCancel.Load() {
 			t.Fatal("signal failure classification, admission or runner join changed")
 		}
-		if mode == "timeout" {
+		if budgetFailure {
 			select {
 			case valid := <-lateBudgetValid:
 				if !errors.Is(err, context.DeadlineExceeded) || !valid {
@@ -126,6 +132,13 @@ func TestLifecycleSignals(t *testing.T) {
 			}
 			if err := l.Run(context.Background()); err == nil {
 				t.Fatal("signal cleanup timeout allowed in-process reuse")
+			}
+			if mode == "readiness-timeout" {
+				select {
+				case <-readinessJoined:
+					t.Fatal("stranded readiness unexpectedly joined")
+				default:
+				}
 			}
 		}
 		if len(order) != 2 || <-order != 2 || <-order != 1 {
@@ -138,7 +151,7 @@ func TestLifecycleSignals(t *testing.T) {
 		os.Exit(0)
 	}
 	for _, signal := range []syscall.Signal{syscall.SIGINT, syscall.SIGTERM} {
-		for _, scenario := range []string{"ready/clean", "ready/error", "ready/panic", "ready/timeout", "startup/clean", "startup/error", "startup/panic", "startup/timeout"} {
+		for _, scenario := range []string{"ready/clean", "ready/error", "ready/panic", "ready/timeout", "startup/clean", "startup/error", "startup/panic", "startup/timeout", "startup/readiness-timeout"} {
 			_, mode, _ := strings.Cut(scenario, "/")
 			t.Run(signal.String()+"/"+scenario, func(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
