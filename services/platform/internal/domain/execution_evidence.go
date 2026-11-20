@@ -236,6 +236,9 @@ func BuildExecutionEvidence(in ExecutionEvidenceInput) (ExecutionEvidence, error
 	}
 	approvals := make(map[string]bool, len(in.Approvals))
 	for _, a := range in.Approvals {
+		if a.ID == "" || approvals[a.ID] {
+			return ExecutionEvidence{}, invalid("evidence: empty or duplicate approval id %q", a.ID)
+		}
 		if a.ProjectID != in.Execution.ProjectID {
 			return ExecutionEvidence{}, invalid("evidence: approval project does not match execution")
 		}
