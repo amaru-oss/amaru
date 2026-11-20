@@ -59,3 +59,12 @@ The new regression covers `Dir`, `Confinement`, `Prepare`, `Head`, `Changed`, `S
 - **Not validated:** actual Worker-entry-to-agent launch and recording enforced roots/ABI in Step results/Events. The base has an embedded Worker Runner interface and helpers, but no production Worker executable or concrete agent Runner to wire. Adding an empty entry point would not satisfy acceptance.
 - **Not validated:** vendor agent CLIs (#127), full #19 Evidence query, PostgreSQL runtime, native macOS/Windows, concurrent path replacement. Cross-platform vet in `make check` is only a compile/vet signal. Read/network isolation and filesystem metadata restrictions are not claimed; existing OS-layer exclusions remain.
 - **Human decisions:** no new architecture choice for this patch. #154 remains open for its owner to assess full acceptance. No issue checkbox, closure, merge or Project-board state was changed. Shared checkout work was preserved.
+
+## Process isolation against a sibling Worktree
+
+The OS process confinement test prepares two real Git Worktrees and starts a
+shell in the first with that Worktree as its only writable root. The shell
+writes to its own Worktree. Attempts to write in the original checkout and the
+sibling Worktree fail, and both outside paths remain absent. This exercises
+the Worktree adapter and process runner together using local Git and shell.
+The test skips when the host lacks confinement support.
