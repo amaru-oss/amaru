@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const FileName = "instance.json"
@@ -49,7 +50,7 @@ func (i Info) valid() bool {
 		return false
 	}
 	b, err := base64.RawURLEncoding.Strict().DecodeString(i.AdministratorSecret)
-	return err == nil && len(b) == 32 && i.PID > 0 && i.ProtocolVersion == 1 && i.PlatformVersion != "" && !i.StartedAt.IsZero()
+	return err == nil && len(b) == 32 && i.PID > 0 && i.ProtocolVersion == 1 && i.PlatformVersion != "" && utf8.ValidString(i.PlatformVersion) && !i.StartedAt.IsZero()
 }
 
 type Publication struct {
