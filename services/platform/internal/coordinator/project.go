@@ -224,6 +224,9 @@ func (a *ProjectAccess) Evidence(ctx context.Context, project domain.ProjectKey,
 	if current.ID != by.ID {
 		return domain.ExecutionEvidence{}, domain.ErrNotPermitted
 	}
+	if bundle.Execution.ID != id || bundle.Execution.ProjectID != string(project) {
+		return domain.ExecutionEvidence{}, domain.ErrNotFound
+	}
 	return bundle, nil
 }
 

@@ -152,3 +152,19 @@ before returning data or using the result as an ownership check.
 
 The mismatch cases are unit-tested with a fake store. They add no
 PostgreSQL runtime, real Provider or native non-Linux evidence.
+
+## Evidence bundle identity follow-up (2026-11-20)
+
+The Project-scoped Evidence read now verifies the returned bundle's
+Execution ID and Project before releasing the bundle. The existing
+authorization check after the read still runs before the response.
+
+- From `services/platform`, `go test -count=1 ./internal/coordinator -run 'TestProjectReadAuthorityDuringIO/^evidence$/(different_record|foreign_bundle)'`
+  failed before the fix (exit 1). A different Execution in the same
+  Project and the requested ID in a different Project both returned
+  Evidence with a nil error.
+- From `services/platform`, `go test -race -count=1 ./internal/coordinator`
+  passed with the fix (exit 0).
+- From the repository root, `make check` passed (exit 0).
+
+The mismatch cases are unit-tested with a fake Evidence reader.
