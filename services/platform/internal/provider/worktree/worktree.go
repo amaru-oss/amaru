@@ -342,16 +342,26 @@ func (r *Repo) status(ctx context.Context, dir string) ([]statusEntry, error) {
 	if err != nil {
 		return nil, err
 	}
+	if out == "" {
+		return nil, nil
+	}
+	out, complete := strings.CutSuffix(out, "\x00")
+	if !complete {
+		return nil, errors.New("git status: incomplete path list")
+	}
 	var es []statusEntry
 	parts := strings.Split(out, "\x00")
 	for i := 0; i < len(parts); i++ {
 		p := parts[i]
-		if len(p) < 4 {
-			continue
+		if len(p) < 4 || p[2] != ' ' {
+			return nil, errors.New("git status: malformed path entry")
 		}
 		e := statusEntry{x: p[0], y: p[1], path: p[3:]}
 		if e.x == 'R' || e.x == 'C' || e.y == 'R' || e.y == 'C' {
 			i++ // the next field is the original path
+			if i == len(parts) || parts[i] == "" {
+				return nil, errors.New("git status: missing original path")
+			}
 		}
 		es = append(es, e)
 	}
