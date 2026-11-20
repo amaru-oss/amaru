@@ -95,3 +95,30 @@ func TestHTTPDeliberateAbortDiagnostic(t *testing.T) {
 		t.Fatalf("unexpected abort diagnostic: %v", recs)
 	}
 }
+
+func TestHTTPPanicAfterCommittedStatusKeepsStatusDiagnostic(t *testing.T) {
+	var output bytes.Buffer
+	logger, err := New(&output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := logger.HTTP("instance", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		panic("private handler diagnostic")
+	}), func(err error) { t.Error(err) })
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("handler panic was swallowed")
+			}
+		}()
+		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil))
+	}()
+	recs := records(t, &output)
+	if len(recs) != 1 || recs[0]["outcome"] != "panicked" || recs[0]["status"] != float64(http.StatusCreated) {
+		t.Fatalf("committed response status missing from panic diagnostic: %v", recs)
+	}
+	if strings.Contains(output.String(), "private handler diagnostic") {
+		t.Fatal("panic diagnostic leaked")
+	}
+}
