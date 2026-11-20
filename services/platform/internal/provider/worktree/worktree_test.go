@@ -864,3 +864,32 @@ func TestChangedPreservesGitPaths(t *testing.T) {
 		}
 	}
 }
+
+type longDiffRunner struct {
+	ports.ProcessRunner
+}
+
+func (r longDiffRunner) Start(ctx context.Context, spec ports.ProcSpec) (ports.Proc, error) {
+	if subcommand(spec.Args) == "diff" {
+		return longDiffProc{output: strings.NewReader(strings.Repeat("path\x00", 1<<20))}, nil
+	}
+	return r.ProcessRunner.Start(ctx, spec)
+}
+
+type longDiffProc struct {
+	ports.Proc
+	output io.Reader
+}
+
+func (p longDiffProc) Stdout() io.Reader  { return p.output }
+func (p longDiffProc) Stderr() io.Reader  { return strings.NewReader("") }
+func (p longDiffProc) Wait() (int, error) { return 0, nil }
+
+func TestChangedRejectsTruncatedPathList(t *testing.T) {
+	e := newPrepared(t)
+	e.rec.inner = longDiffRunner{e.rec.inner}
+	got, err := e.r.Changed(context.Background(), e.ws)
+	if err == nil || got != nil {
+		t.Fatalf("Changed returned %d entries and error %v for oversized output", len(got), err)
+	}
+}
