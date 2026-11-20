@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -459,6 +460,22 @@ func TestBuildExecutionEvidenceRejectsAmbiguousApprovals(t *testing.T) {
 			got, err := BuildExecutionEvidence(in)
 			if !errors.Is(err, ErrInvalid) || !reflect.DeepEqual(got, ExecutionEvidence{}) {
 				t.Fatalf("ambiguous Approval returned Evidence: %v", err)
+			}
+		})
+	}
+}
+
+func TestBuildExecutionEvidenceRejectsInvalidAuditSequence(t *testing.T) {
+	for _, seq := range []int64{0, 1, 2} {
+		t.Run(fmt.Sprintf("after 2: %d", seq), func(t *testing.T) {
+			in := evidenceInput(t)
+			in.Audit[0].Seq = 2
+			next := in.Audit[0]
+			next.Seq = seq
+			in.Audit = append(in.Audit, next)
+			got, err := BuildExecutionEvidence(in)
+			if !errors.Is(err, ErrInvalid) || !reflect.DeepEqual(got, ExecutionEvidence{}) {
+				t.Fatalf("invalid Audit sequence returned Evidence: %v", err)
 			}
 		})
 	}

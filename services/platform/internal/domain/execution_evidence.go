@@ -250,7 +250,12 @@ func BuildExecutionEvidence(in ExecutionEvidenceInput) (ExecutionEvidence, error
 		}
 		approvals[a.ID] = true
 	}
+	var lastAuditSeq int64
 	for _, ev := range in.Audit {
+		if ev.Seq <= lastAuditSeq {
+			return ExecutionEvidence{}, invalid("evidence: audit sequence %d does not advance past %d", ev.Seq, lastAuditSeq)
+		}
+		lastAuditSeq = ev.Seq
 		if ev.ProjectID != in.Execution.ProjectID {
 			return ExecutionEvidence{}, invalid("evidence: approval audit project does not match execution")
 		}
