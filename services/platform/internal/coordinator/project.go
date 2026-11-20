@@ -74,7 +74,7 @@ func (a *ProjectAccess) authorize(ctx context.Context, project domain.ProjectKey
 
 func (a *ProjectAccess) execution(ctx context.Context, project domain.ProjectKey, id string) (domain.Execution, []domain.StepExecution, error) {
 	e, steps, err := a.coordinator.store.Get(ctx, id)
-	if errors.Is(err, domain.ErrNotFound) || (err == nil && e.ProjectID != string(project)) {
+	if errors.Is(err, domain.ErrNotFound) || (err == nil && (e.ID != id || e.ProjectID != string(project))) {
 		return domain.Execution{}, nil, domain.ErrNotFound
 	}
 	return e, steps, err
@@ -141,7 +141,7 @@ func (a *ProjectAccess) approval(ctx context.Context, project domain.ProjectKey,
 	if err != nil {
 		return domain.Approval{}, err
 	}
-	if approval.ProjectID != string(project) {
+	if approval.ID != id || approval.ProjectID != string(project) {
 		return domain.Approval{}, domain.ErrNotFound
 	}
 	if _, _, err := a.execution(ctx, project, approval.Gate.ExecutionID); err != nil {

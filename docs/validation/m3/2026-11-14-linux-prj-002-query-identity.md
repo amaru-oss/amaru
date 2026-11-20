@@ -136,3 +136,19 @@ No new PostgreSQL runtime, native non-Linux, real Provider, product startup/proc
 restart or new public Workflow/Evidence/Artifact route validation. Cross-OS vet
 is not native evidence. #191/#18/#20 and M3 remain open; no full acceptance,
 merge or proposed-decision implementation is claimed.
+
+## Same-Project record identity follow-up (2026-11-20)
+
+On the #18 base at `2e7d76f`, the Execution and Approval ownership
+lookups accepted a same-Project record carrying a different ID.
+They now require both the requested record ID and the Project to match
+before returning data or using the result as an ownership check.
+
+- From `services/platform`, `go test -count=1 ./internal/coordinator -run 'TestProjectReadAuthorityDuringIO/(execution|approval)/different_record'`
+  failed before the fix (exit 1). Both cases returned data and a nil error.
+- From `services/platform`, `go test -race -count=1 ./internal/coordinator`
+  passed after the fix (exit 0), including the two new cases.
+- From the repository root, `make check` passed (exit 0).
+
+The mismatch cases are unit-tested with a fake store. They add no
+PostgreSQL runtime, real Provider or native non-Linux evidence.
