@@ -76,3 +76,7 @@ request record. The same test still covers forwarding 103 before a final respons
 ## Follow-up
 
 The Linux HTTP integration test also flushes a 204 response before hijacking the connection and requires the diagnostic to retain 204. A hijack before any final header continues to record 101 for the WebSocket path.
+
+## Unsupported flush
+
+`TestHTTPUnsupportedFlushLeavesStatusOpen` exercises a writer without flush support. A failed capability probe leaves the final status open, so the handler can still send a 503 and the operational record reports the same status.
