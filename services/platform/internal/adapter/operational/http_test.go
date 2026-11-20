@@ -344,24 +344,39 @@ func TestHTTPUpgradeFlushAndPanicChannels(t *testing.T) {
 			if err := http.NewResponseController(w).Flush(); err != nil {
 				t.Error(err)
 			}
-		case "/socket":
+		case "/committed", "/socket":
+			if r.URL.Path == "/committed" {
+				w.WriteHeader(http.StatusNoContent)
+				if err := http.NewResponseController(w).Flush(); err != nil {
+					t.Error(err)
+				}
+			}
 			conn, rw, err := http.NewResponseController(w).Hijack()
 			if err != nil {
 				t.Error(err)
 				return
 			}
 			defer conn.Close()
+			if r.URL.Path == "/committed" {
+				return
+			}
 			rw.WriteString("HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n")
 			rw.Flush()
 		}
 	})
-	server := httptest.NewUnstartedServer(logger.HTTP("instance", next, func(err error) { t.Error(err) }))
+	logged := make(chan struct{}, 1)
+	wrapped := logger.HTTP("instance", next, func(err error) { t.Error(err) })
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() { logged <- struct{}{} }()
+		wrapped.ServeHTTP(w, r)
+	}))
 	server.Config.ErrorLog = log.New(&serverErrors, "", 0)
 	server.Start()
 	defer server.Close()
 	client := server.Client()
-	for _, path := range []string{"/stream", "/socket", "/panic"} {
+	for _, path := range []string{"/stream", "/socket", "/committed", "/panic"} {
 		res, err := client.Get(server.URL + path)
+		<-logged
 		if path == "/panic" {
 			if err == nil {
 				res.Body.Close()
@@ -372,6 +387,9 @@ func TestHTTPUpgradeFlushAndPanicChannels(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if path == "/committed" && res.StatusCode != http.StatusNoContent {
+			t.Errorf("committed response status = %d, want 204", res.StatusCode)
+		}
 		io.Copy(io.Discard, res.Body)
 		res.Body.Close()
 	}
@@ -380,8 +398,9 @@ func TestHTTPUpgradeFlushAndPanicChannels(t *testing.T) {
 		t.Fatal("unsafe panic diagnostic emitted")
 	}
 	recs := records(t, &output)
-	var upgraded, panicked bool
+	var upgraded, panicked, committed bool
 	for _, r := range recs {
+		committed = committed || r["status"] == float64(204)
 		if r["status"] == float64(101) {
 			upgraded = true
 		}
@@ -392,8 +411,8 @@ func TestHTTPUpgradeFlushAndPanicChannels(t *testing.T) {
 			}
 		}
 	}
-	if !upgraded || !panicked {
-		t.Fatal("missing upgrade/panic outcome")
+	if !upgraded || !panicked || !committed {
+		t.Fatalf("missing upgrade, committed response or panic diagnostic: %v", recs)
 	}
 }
 

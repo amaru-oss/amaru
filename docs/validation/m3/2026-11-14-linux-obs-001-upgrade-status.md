@@ -72,3 +72,7 @@ The live HTTP regression sends a 103 after a 204. The baseline forwarded the
 late header to net/http, which emitted an unstructured server diagnostic.
 The wrapper now suppresses it and retains 204 on the wire and in the structured
 request record. The same test still covers forwarding 103 before a final response.
+
+## Follow-up
+
+The Linux HTTP integration test also flushes a 204 response before hijacking the connection and requires the diagnostic to retain 204. A hijack before any final header continues to record 101 for the WebSocket path.
