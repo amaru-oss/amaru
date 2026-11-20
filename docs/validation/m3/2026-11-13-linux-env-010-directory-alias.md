@@ -76,3 +76,8 @@ The confinement helper verifies that the directory is a linked worktree of the P
 ## Workspace base identity
 
 The native Git worktree test exercises a Workspace with a different recorded base. Existing-worktree operations refuse it with `ErrConflict` before using the adapter's configured base. Confinement also refuses a detached or wrong-branch checkout.
+
+`TestHeadRejectsIncompleteStatusOutput` uses real Git for worktree setup and a
+fake status response to verify the shared status reader rejects incomplete or
+malformed porcelain entries. Head and removal use that same reader, so
+malformed status cannot be treated as a clean worktree.

@@ -3,6 +3,7 @@ package worktree_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -891,19 +892,19 @@ type longDiffRunner struct {
 
 func (r longDiffRunner) Start(ctx context.Context, spec ports.ProcSpec) (ports.Proc, error) {
 	if subcommand(spec.Args) == "diff" {
-		return longDiffProc{output: strings.NewReader(strings.Repeat("path\x00", 1<<20))}, nil
+		return outputProc{output: strings.NewReader(strings.Repeat("path\x00", 1<<20))}, nil
 	}
 	return r.ProcessRunner.Start(ctx, spec)
 }
 
-type longDiffProc struct {
+type outputProc struct {
 	ports.Proc
 	output io.Reader
 }
 
-func (p longDiffProc) Stdout() io.Reader  { return p.output }
-func (p longDiffProc) Stderr() io.Reader  { return strings.NewReader("") }
-func (p longDiffProc) Wait() (int, error) { return 0, nil }
+func (p outputProc) Stdout() io.Reader  { return p.output }
+func (p outputProc) Stderr() io.Reader  { return strings.NewReader("") }
+func (p outputProc) Wait() (int, error) { return 0, nil }
 
 func TestChangedRejectsTruncatedPathList(t *testing.T) {
 	e := newPrepared(t)
@@ -939,5 +940,30 @@ func TestConfinementRequiresPreparedWorktree(t *testing.T) {
 	}
 	if _, err := e.r.Confinement(context.Background(), ws); !errors.Is(err, domain.ErrConflict) {
 		t.Fatalf("got %v, want ErrConflict for an unrelated directory", err)
+	}
+}
+
+type statusOutputRunner struct {
+	ports.ProcessRunner
+	output string
+}
+
+func (r statusOutputRunner) Start(ctx context.Context, spec ports.ProcSpec) (ports.Proc, error) {
+	if subcommand(spec.Args) == "status" {
+		return outputProc{output: strings.NewReader(r.output)}, nil
+	}
+	return r.ProcessRunner.Start(ctx, spec)
+}
+
+func TestHeadRejectsIncompleteStatusOutput(t *testing.T) {
+	for _, output := range []string{"??", "?? file", "??-file\x00", "R  move.txt\x00"} {
+		t.Run(fmt.Sprintf("%q", output), func(t *testing.T) {
+			e := newPrepared(t)
+			e.rec.inner = statusOutputRunner{ProcessRunner: e.rec.inner, output: output}
+			got, err := e.r.Head(context.Background(), e.ws)
+			if err == nil || got != (domain.WorktreeHead{}) {
+				t.Fatalf("Head reported partial status: %+v, %v", got, err)
+			}
+		})
 	}
 }
