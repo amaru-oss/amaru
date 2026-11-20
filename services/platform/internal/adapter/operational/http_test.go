@@ -162,13 +162,15 @@ func TestHTTPInformationalAndUpgradeStatus(t *testing.T) {
 		{"hints_then_upgrade", []int{103, 101}, "", 101},
 		{"upgrade_then_header", []int{101, 204}, "", 101},
 		{"hints_then_final", []int{103, 204}, "", 204},
+		{"final_then_hints", []int{204, 103}, "", 204},
 		{"hints_then_write", []int{103}, "write", 200},
 		{"hints_then_flush", []int{103}, "flush", 200},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var output bytes.Buffer
 			logger, _ := New(&output)
-			server := httptest.NewServer(logger.HTTP("instance", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var serverErrors bytes.Buffer
+			server := httptest.NewUnstartedServer(logger.HTTP("instance", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				for _, status := range tc.headers {
 					w.WriteHeader(status)
 				}
@@ -181,6 +183,8 @@ func TestHTTPInformationalAndUpgradeStatus(t *testing.T) {
 					}
 				}
 			}), func(err error) { t.Error(err) }))
+			server.Config.ErrorLog = log.New(&serverErrors, "", 0)
+			server.Start()
 			defer server.Close()
 			res, err := server.Client().Get(server.URL + "/?token=private-query")
 			if err != nil {
@@ -188,6 +192,9 @@ func TestHTTPInformationalAndUpgradeStatus(t *testing.T) {
 			}
 			res.Body.Close()
 			server.Close()
+			if serverErrors.Len() != 0 {
+				t.Fatal("unexpected net/http diagnostic")
+			}
 			recs := records(t, &output)
 			if len(recs) != 1 {
 				t.Fatalf("records: %d", len(recs))
