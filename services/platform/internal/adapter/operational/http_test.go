@@ -506,7 +506,7 @@ func TestHTTPLogErrorCallbackPanicOmitsRawDiagnostic(t *testing.T) {
 	}
 }
 
-func TestHTTPUnsupportedFlushLeavesStatusOpen(t *testing.T) {
+func TestHTTPUnsupportedFlushAllowsFallback(t *testing.T) {
 	var output bytes.Buffer
 	logger, _ := New(&output)
 	recorder := httptest.NewRecorder()
@@ -518,7 +518,23 @@ func TestHTTPUnsupportedFlushLeavesStatusOpen(t *testing.T) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}), func(err error) { t.Error(err) }).ServeHTTP(writer, httptest.NewRequest(http.MethodGet, "/", nil))
 	recs := records(t, &output)
-	if recorder.Code != http.StatusServiceUnavailable || len(recs) != 1 || recs[0]["status"] != float64(http.StatusServiceUnavailable) {
+	if recorder.Code != http.StatusServiceUnavailable || len(recs) != 1 || recs[0]["status"] != float64(http.StatusServiceUnavailable) || recs[0]["outcome"] != "rejected" || recs[0]["cause"] != nil {
+		t.Fatalf("response = %d, diagnostic = %v", recorder.Code, recs)
+	}
+}
+
+func TestHTTPUnsupportedHijackAllowsFallback(t *testing.T) {
+	var output bytes.Buffer
+	logger, _ := New(&output)
+	recorder := httptest.NewRecorder()
+	logger.HTTP("instance", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if _, _, err := http.NewResponseController(w).Hijack(); !errors.Is(err, http.ErrNotSupported) {
+			t.Fatalf("hijack = %v, want ErrNotSupported", err)
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}), func(err error) { t.Error(err) }).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
+	recs := records(t, &output)
+	if recorder.Code != http.StatusAccepted || len(recs) != 1 || recs[0]["status"] != float64(http.StatusAccepted) || recs[0]["outcome"] != "succeeded" || recs[0]["cause"] != nil {
 		t.Fatalf("response = %d, diagnostic = %v", recorder.Code, recs)
 	}
 }
