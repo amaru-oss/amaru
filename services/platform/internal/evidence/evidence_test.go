@@ -22,7 +22,7 @@ type executionRead struct {
 	id         string
 	fail       string
 	err        error
-	approval   *domain.Approval
+	approvals  []domain.Approval
 	auditCalls []int64
 	audit      func(int64, int) ([]domain.AuditEvent, error)
 }
@@ -43,8 +43,8 @@ func (s *executionRead) Approvals(context.Context, string) ([]domain.Approval, e
 	if s.fail == "approvals" {
 		return nil, s.err
 	}
-	if s.approval != nil {
-		return []domain.Approval{*s.approval}, nil
+	if s.approvals != nil {
+		return s.approvals, nil
 	}
 	return []domain.Approval{{ID: "a1", Gate: domain.ApprovalGate{ExecutionID: s.id, StepID: "s1"}}}, nil
 }
@@ -299,11 +299,26 @@ func TestBundleRejectsForeignApprovalBeforeAuditRead(t *testing.T) {
 		{ID: "a1", Gate: domain.ApprovalGate{ExecutionID: "e1", StepID: "unknown"}},
 	} {
 		r, s := readerFixture()
-		s.approval = &gate
+		s.approvals = []domain.Approval{gate}
 		b, err := r.Bundle(context.Background(), "e1")
 		assertNoBundle(t, b, err, domain.ErrInvalid)
 		if len(s.auditCalls) != 0 {
 			t.Error("queried audit for an Approval outside the Execution's scope")
+		}
+	}
+}
+
+func TestBundleRejectsAmbiguousApprovalsBeforeAuditRead(t *testing.T) {
+	valid := domain.Approval{ID: "a1", Gate: domain.ApprovalGate{ExecutionID: "e1", StepID: "s1"}}
+	withoutID := valid
+	withoutID.ID = ""
+	for _, approvals := range [][]domain.Approval{{withoutID}, {valid, valid}} {
+		r, s := readerFixture()
+		s.approvals = approvals
+		b, err := r.Bundle(context.Background(), "e1")
+		assertNoBundle(t, b, err, domain.ErrInvalid)
+		if len(s.auditCalls) != 0 {
+			t.Error("queried audit for ambiguous Approval identities")
 		}
 	}
 }
