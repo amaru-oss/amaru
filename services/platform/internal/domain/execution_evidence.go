@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -204,6 +205,12 @@ func BuildExecutionEvidence(in ExecutionEvidenceInput) (ExecutionEvidence, error
 		if !ok || v.ExecutionID != id {
 			return ExecutionEvidence{}, invalid("evidence: artifact %s v%d of step %s/%s is not a step of execution %s", v.ArtifactID, v.Version, v.ExecutionID, v.StepID, id)
 		}
+		if v.Version < 1 {
+			return ExecutionEvidence{}, invalid("evidence: artifact version must be positive")
+		}
+		if err := v.Validate(); err != nil {
+			return ExecutionEvidence{}, fmt.Errorf("evidence: recorded artifact: %w", err)
+		}
 		out.Steps[i].Artifacts = append(out.Steps[i].Artifacts, v)
 	}
 	for i := range out.Steps {
@@ -214,7 +221,7 @@ func BuildExecutionEvidence(in ExecutionEvidenceInput) (ExecutionEvidence, error
 				}
 				return 1
 			}
-			return int(a.Version - b.Version)
+			return cmp.Compare(a.Version, b.Version)
 		})
 	}
 	approvals := make(map[string]bool, len(in.Approvals))

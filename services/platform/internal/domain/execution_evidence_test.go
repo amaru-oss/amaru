@@ -95,10 +95,10 @@ func evidenceInput(t *testing.T) ExecutionEvidenceInput {
 		Audit:     []AuditEvent{{Seq: 3, At: at, Kind: AuditApprovalRequested, Actor: "u1", ActorKind: ActorHuman, TargetType: "approval", TargetID: "e1.a", ProjectID: "p1"}},
 		Contexts:  []StepContext{{ExecutionID: "e1", StepID: "e1.a", Format: ContextFormat, Hash: ContentHash([]byte("doc")), Document: "doc", CreatedAt: at}},
 		Artifacts: []ArtifactVersion{
-			{ArtifactID: "z", Version: 1, ExecutionID: "e1", StepID: "e1.a"},
-			{ArtifactID: "a", Version: 2, ExecutionID: "e1", StepID: "e1.a"},
-			{ArtifactID: "a", Version: 1, ExecutionID: "e1", StepID: "e1.a"},
-			{ArtifactID: "m", Version: 1, ExecutionID: "e1", StepID: "e1.b"},
+			{ArtifactID: "z", Version: 1, ExecutionID: "e1", StepID: "e1.a", AttemptID: "attempt", Hash: ContentHash([]byte("output")), Path: "out.txt", CreatedAt: at},
+			{ArtifactID: "a", Version: 2, ExecutionID: "e1", StepID: "e1.a", AttemptID: "attempt", Hash: ContentHash([]byte("output")), Path: "out.txt", CreatedAt: at},
+			{ArtifactID: "a", Version: 1, ExecutionID: "e1", StepID: "e1.a", AttemptID: "attempt", Hash: ContentHash([]byte("output")), Path: "out.txt", CreatedAt: at},
+			{ArtifactID: "m", Version: 1, ExecutionID: "e1", StepID: "e1.b", AttemptID: "attempt", Hash: ContentHash([]byte("output")), Path: "out.txt", CreatedAt: at},
 		},
 	}
 }
@@ -282,7 +282,7 @@ func TestBuildExecutionEvidenceDigestIsStableAndSeesEveryPart(t *testing.T) {
 			in.Contexts[0].Document = "other"
 			in.Contexts[0].Hash = ContentHash([]byte(in.Contexts[0].Document))
 		},
-		"artifact": func(in *ExecutionEvidenceInput) { in.Artifacts[0].Hash = "sha256:x" },
+		"artifact": func(in *ExecutionEvidenceInput) { in.Artifacts[0].Hash = ContentHash([]byte("changed")) },
 	} {
 		in := evidenceInput(t)
 		edit(&in)
@@ -400,5 +400,14 @@ func TestBuildExecutionEvidenceRejectsCrossProjectApprovalRecords(t *testing.T) 
 				t.Fatal("cross-Project record returned Evidence")
 			}
 		})
+	}
+}
+
+func TestBuildExecutionEvidenceRejectsInvalidArtifact(t *testing.T) {
+	in := evidenceInput(t)
+	in.Artifacts[0].Hash = "sha256:invalid"
+	got, err := BuildExecutionEvidence(in)
+	if !errors.Is(err, ErrInvalid) || !reflect.DeepEqual(got, ExecutionEvidence{}) {
+		t.Fatalf("invalid artifact returned Evidence: %+v, %v", got, err)
 	}
 }
