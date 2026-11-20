@@ -12,6 +12,7 @@ import (
 	"github.com/rluders/amaru/services/platform/internal/ports/fakes"
 	"github.com/rluders/amaru/services/platform/internal/worker/embedded"
 	"io"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -118,42 +119,56 @@ func TestCommandsProviderFailureAndCancellation(t *testing.T) {
 	store := fakes.NewExecutionStore()
 	c := coordinator.New(store, time.Now, coordtest.Permissive)
 	ctx := WithIdentity(context.Background(), Identity{InstanceID: "instance", CorrelationID: "command-correlation", ProjectID: "project"})
-	got, _, err := c.Submit(ctx, coordinator.SubmitRequest{Key: "submit", ProjectID: "project", By: domain.Principal{ID: "human", Kind: domain.PrincipalHuman}, Steps: []coordinator.StepSpec{{Name: "check", Capability: "code.test"}}})
+	commands := Commands{Next: c, Logger: l}
+	got, _, err := commands.Submit(ctx, coordinator.SubmitRequest{Key: "submit", ProjectID: "project", By: domain.Principal{ID: "human", Kind: domain.PrincipalHuman}, Steps: []coordinator.StepSpec{{Name: "check", Capability: "code.test"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := IdentityFrom(ctx)
 	id.ExecutionID = got.Execution.ID
 	ctx = WithIdentity(ctx, id)
-	if err := l.Write(ctx, Record{Operation: coordinator.CmdSubmit, Outcome: "succeeded"}); err != nil {
-		t.Fatal(err)
-	}
 	runner := embedded.RunnerFunc(func(context.Context, ports.Assignment) embedded.Outcome {
 		return embedded.Outcome{Result: ports.OutcomeFailed, ErrorCode: "unavailable", ErrorDetail: "Provider unavailable: " + secret}
 	})
 	assignment := ports.Assignment{ExecutionID: got.Execution.ID, StepID: got.Steps[0].ID, AttemptID: "attempt"}
-	out := runner.Run(ctx, assignment)
-	stepID := id
-	stepID.StepID = assignment.StepID
-	if err := l.Write(WithIdentity(ctx, stepID), Record{Operation: "step.result", Outcome: "failed", Cause: out.ErrorCode + ": " + out.ErrorDetail}); err != nil {
-		t.Fatal(err)
-	}
-	_, _, err = c.Cancel(ctx, coordinator.CancelRequest{Key: "cancel", ExecutionID: got.Execution.ID, ActorID: "human", By: domain.Actor{Kind: domain.ActorHuman}, Reason: secret})
+	queue := make(chan RunnerRecord, 2)
+	observed, err := ObserveRunner("instance", runner, queue)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := l.Write(ctx, Record{Operation: coordinator.CmdCancel, Outcome: "succeeded"}); err != nil {
+	observed.Run(ctx, assignment)
+	<-queue
+	failed := <-queue
+	failed.Identity.ProjectID = "project"
+	if err := l.Write(WithIdentity(ctx, failed.Identity), failed.Record); err != nil {
 		t.Fatal(err)
 	}
-	// A rejected command keeps its useful, redacted cause without adding state.
-	_, _, err = c.Cancel(ctx, coordinator.CancelRequest{Key: "invalid", ExecutionID: got.Execution.ID, ActorID: "human", By: domain.Actor{Kind: domain.ActorHuman}, Reason: secret})
-	if err == nil {
-		t.Fatal("ended execution accepted cancellation")
+	_, _, err = commands.Cancel(ctx, coordinator.CancelRequest{Key: "cancel", ExecutionID: got.Execution.ID, ActorID: "human", By: domain.Actor{Kind: domain.ActorHuman}, Reason: secret})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err := l.Write(ctx, Record{Operation: coordinator.CmdCancel, Outcome: "rejected", Cause: err.Error()}); err != nil {
+	before, err := store.Events(ctx, got.Execution.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	auditBefore, err := store.Audit(ctx, 0, 1000)
+	if err != nil {
 		t.Fatal(err)
 	}
 
+	_, _, err = commands.Cancel(ctx, coordinator.CancelRequest{Key: "invalid", ExecutionID: got.Execution.ID, ActorID: "human", By: domain.Actor{Kind: domain.ActorHuman}, Reason: secret})
+	if err == nil {
+		t.Fatal("ended execution accepted cancellation")
+	}
+
+	after, err := store.Events(ctx, got.Execution.ID)
+	if err != nil || !reflect.DeepEqual(before, after) {
+		t.Fatal("diagnostics changed domain history")
+	}
+	auditAfter, err := store.Audit(ctx, 0, 1000)
+	if err != nil || !reflect.DeepEqual(auditBefore, auditAfter) {
+		t.Fatal("diagnostics changed audit history")
+	}
 	e, _, err := store.Get(ctx, got.Execution.ID)
 	if err != nil || e.State != domain.ExecCancelled {
 		t.Fatal("cancel did not commit")
@@ -162,12 +177,24 @@ func TestCommandsProviderFailureAndCancellation(t *testing.T) {
 	if len(recs) != 4 {
 		t.Fatal("missing records")
 	}
-	for _, r := range recs {
-		if r["instanceId"] != "instance" || r["projectId"] != "project" || r["executionId"] != got.Execution.ID || r["correlationId"] != "command-correlation" {
+	for i, want := range []string{"succeeded", "failed", "succeeded", "rejected"} {
+		if recs[i]["outcome"] != want {
+			t.Fatal("incorrect command outcome")
+		}
+	}
+	if recs[3]["cause"] != domain.ErrInvalidTransition.Error() {
+		t.Fatal("missing safe rejection cause")
+	}
+	for i, r := range recs {
+		wantCorrelation := "command-correlation"
+		if i == 1 {
+			wantCorrelation = "attempt"
+		}
+		if r["instanceId"] != "instance" || r["projectId"] != "project" || r["executionId"] != got.Execution.ID || r["correlationId"] != wantCorrelation {
 			t.Fatal("lost identity")
 		}
 	}
-	if recs[1]["stepId"] != assignment.StepID || !strings.Contains(recs[1]["cause"].(string), "unavailable") {
+	if recs[1]["stepId"] != assignment.StepID || recs[1]["cause"] != "Provider reported failure" {
 		t.Fatal("lost failure context")
 	}
 	if strings.Contains(buf.String(), secret) {

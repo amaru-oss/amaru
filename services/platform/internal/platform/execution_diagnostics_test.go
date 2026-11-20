@@ -49,7 +49,11 @@ func TestExecutionDiagnosticChannels(t *testing.T) {
 			var attempt string
 			for i, line := range lines {
 				var record map[string]json.RawMessage
-				if json.Unmarshal(line, &record) != nil || len(record) != 8 {
+				fields := 8
+				if mode == "failure" && i == 1 {
+					fields++
+				}
+				if json.Unmarshal(line, &record) != nil || len(record) != fields {
 					t.Fatal("invalid diagnostic JSON fields")
 				}
 				field := func(key string) string {
@@ -73,6 +77,9 @@ func TestExecutionDiagnosticChannels(t *testing.T) {
 				want := "started"
 				if i == 1 {
 					want = map[string]string{"success": "succeeded", "failure": "failed", "panic": "panicked", "cancel": "cancelled"}[mode]
+				}
+				if mode == "failure" && i == 1 && field("cause") != "Provider reported failure" {
+					t.Fatal("missing safe Provider cause")
 				}
 				if field("outcome") != want {
 					t.Fatal("incorrect Runner outcome")
