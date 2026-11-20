@@ -231,3 +231,21 @@ func TestPublicationFailurePreservesRecord(t *testing.T) {
 	}
 	defer replacement.Close()
 }
+
+func TestDiscoveryRejectsEmptyURLDelimiters(t *testing.T) {
+	info := Info{
+		Endpoint: "http://127.0.0.1:7777", Port: 7777,
+		PID: os.Getpid(), AdministratorSecret: fixtureSecret,
+		ProtocolVersion: 1, PlatformVersion: "test", StartedAt: time.Now(),
+	}
+	if !info.valid() {
+		t.Fatal("loopback endpoint should be valid")
+	}
+	for _, suffix := range []string{"?", "#", "?#"} {
+		bad := info
+		bad.Endpoint += suffix
+		if bad.valid() {
+			t.Errorf("discovery accepted empty URL delimiter %q", suffix)
+		}
+	}
+}
