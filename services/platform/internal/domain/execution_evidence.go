@@ -114,6 +114,7 @@ func BuildExecutionEvidence(in ExecutionEvidenceInput) (ExecutionEvidence, error
 		}
 	}
 	steps := make(map[string]int, len(in.Steps))
+	currentAttempts := make(map[string]string, len(in.Steps))
 	out := ExecutionEvidence{
 		Execution: in.Execution,
 		Steps:     make([]StepEvidence, len(in.Steps)),
@@ -131,6 +132,12 @@ func BuildExecutionEvidence(in ExecutionEvidenceInput) (ExecutionEvidence, error
 			return ExecutionEvidence{}, invalid("evidence: step %s belongs to execution %s, not %s", st.ID, st.ExecutionID, id)
 		}
 		steps[st.ID] = i
+		if st.AttemptID != "" {
+			if _, exists := currentAttempts[st.AttemptID]; exists {
+				return ExecutionEvidence{}, invalid("evidence: duplicate current attempt")
+			}
+			currentAttempts[st.AttemptID] = st.ID
+		}
 		se := StepEvidence{
 			ID: st.ID, State: st.State, Reason: st.Reason, Capability: st.Capability, AttemptID: st.AttemptID,
 			StartedAt: st.StartedAt, EndedAt: st.EndedAt, Error: st.Error,
@@ -152,6 +159,9 @@ func BuildExecutionEvidence(in ExecutionEvidenceInput) (ExecutionEvidence, error
 		// Historical attempts remain attributable to the Step; do not bind to latest.
 		if c.ExecutionID != id || c.ProjectID != in.Execution.ProjectID || c.EnvironmentID != in.Execution.EnvironmentID || c.AttemptID == "" || c.CapturedAt.IsZero() {
 			return ExecutionEvidence{}, invalid("evidence: usage scope mismatch")
+		}
+		if owner, current := currentAttempts[c.AttemptID]; current && owner != c.StepID {
+			return ExecutionEvidence{}, invalid("evidence: usage attempt belongs to another step")
 		}
 		if err := ValidateUsage(c.Reports); err != nil {
 			return ExecutionEvidence{}, err

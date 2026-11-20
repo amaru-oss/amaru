@@ -33,3 +33,7 @@ Environment: Linux `7.2.11-100.fc43.x86_64`, x86_64; Go `go1.26.0 linux/amd64`; 
 **Unit-tested:** current-attempt coverage and retained history; fake-backed Reader composition. **Integration-tested:** existing PostgreSQL capture/replay/atomicity suite. **Not validated:** full PostgreSQL suite, transactionally consistent multi-store reads, authorized public API/contract and Organization boundary, actual UsageRecorded publication, remaining check/diff/log/workspace recorders, real Provider Usage, native macOS/Windows, or full multi-Step audit walkthrough. No new owner decision is required for this correction; missing recorder semantics and public contract review remain gates for subsequent slices under ADR-0069.
 
 Shared dirty checkout, owner articles and unrelated branches are preserved. Generated Trail cache is not part of the change. No merge or issue closure was performed.
+
+## Follow-up
+
+The Evidence builder now refuses a receipt assigned to a different Step from the one holding that current attempt and refuses duplicate current attempt IDs. Historical receipts without a current match remain visible on the Step that recorded them.
