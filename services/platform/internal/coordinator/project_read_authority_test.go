@@ -78,7 +78,10 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 	owner := domain.Principal{Kind: domain.PrincipalHuman, ID: "owner", Role: domain.RoleOwner}
 	failed := errors.New("storage unavailable")
 	for _, operation := range []string{"project lookup", "execution", "approval", "events", "evidence", "settings", "artifact versions", "artifact content", "event ownership", "evidence ownership", "artifact ownership"} {
-		for _, outcome := range []string{"authorized", "revoked", "canceled", "identity changed", "storage error", "storage error with identity changed"} {
+		for _, outcome := range []string{"authorized", "revoked", "canceled", "identity changed", "storage error", "storage error with identity changed", "different record"} {
+			if outcome == "different record" && operation != "execution" && operation != "approval" {
+				continue
+			}
 			if operation == "project lookup" && strings.HasPrefix(outcome, "storage error") {
 				continue
 			}
@@ -139,15 +142,19 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 					}
 					return reader, nil
 				}}
+				executionID, approvalID := "execution", "approval"
+				if outcome == "different record" {
+					executionID, approvalID = "requested-execution", "requested-approval"
+				}
 				var got, zero any
 				switch operation {
 				case "project lookup", "execution":
 					var e domain.Execution
 					var steps []domain.StepExecution
-					e, steps, err = api.Execution(ctx, project, "execution")
+					e, steps, err = api.Execution(ctx, project, executionID)
 					got, zero = []any{e, steps}, []any{domain.Execution{}, []domain.StepExecution(nil)}
 				case "approval":
-					got, err = api.Approval(ctx, project, "approval")
+					got, err = api.Approval(ctx, project, approvalID)
 					zero = domain.Approval{}
 				case "event ownership":
 					got, err = api.Events(ctx, domain.EventQuery{ProjectID: string(project), ExecutionID: "execution", Limit: 10}, readAuthorityStream{func() {}, nil}, time.Hour)
@@ -183,6 +190,9 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 					return
 				}
 				want := failed
+				if outcome == "different record" {
+					want = domain.ErrNotFound
+				}
 				if outcome == "revoked" || outcome == "identity changed" {
 					want = domain.ErrNotPermitted
 				}
