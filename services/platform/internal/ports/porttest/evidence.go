@@ -31,6 +31,7 @@ func ExecutionEvidence(t *testing.T, newStores func(t *testing.T) EvidenceStores
 	run := func(t *testing.T, s EvidenceStores, id string) {
 		t.Helper()
 		e, steps := newExec(id, id+".a", id+".b")
+		e.ProjectID = "p1"
 		pin, err := domain.Pin(domain.Workflow{ID: "ship-it", Name: "Ship it", Status: domain.WorkflowActive,
 			Steps: []domain.WorkflowStep{{ID: "build", Name: "Build", Type: domain.StepTypeTool, Capability: "code.build"}}}, "")
 		if err != nil {
