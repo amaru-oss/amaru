@@ -109,6 +109,8 @@ positive control.
 
 `make check` includes the compact auth/discovery Go tests, auth schema/fixture parity and SDK integration against a test-only Go loopback server. On Linux the discovery tests check native private modes and cross-process ownership. Real browser validation is separate: from `services/platform`, run `go test -tags browser -count=1 -run TestFirefoxLaunchSessionAndLogout -v ./internal/adapter/localauth`. It launches isolated native Firefox profiles, discards diagnostics that could include launch URLs and tests localhost/IPv4/IPv6 loopback cookie, CSRF and WebSocket revocation. The [IPv6 IAM-001 record](../validation/m3/2026-11-13-linux-iam-001-ipv6.md) records the native Linux Firefox IPv6 run and exact Host/Origin/session rejection coverage. Evidence and unvalidated composition/platform items: [2026-11-12 IAM-001](../validation/m3/2026-11-12-linux-iam-001.md).
 
+The IAM-001 evidence matrix records each #92 criterion, its evidence level and the owner of each remaining gap.
+
 OBS-001 HTTP log-error callback panic containment: [Linux regression record](../validation/m3/2026-11-14-linux-obs-001-callback-panic.md).
 
 OBS-001 HTTP 101/final status capture: [Linux loopback regression record](../validation/m3/2026-11-14-linux-obs-001-upgrade-status.md).

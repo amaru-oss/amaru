@@ -181,10 +181,16 @@ func TestHTTPDiscoveryAdmissionAndProductAuthentication(t *testing.T) {
 		t.Fatal("native issuance failed")
 	}
 	resp.Body.Close()
-	resp = httpCall(t, info, "GET", "/auth/launch?code="+url.QueryEscape(launch.Code), "", nil)
+	launchPath := "/auth/launch?code=" + url.QueryEscape(launch.Code)
+	resp = httpCall(t, info, "GET", launchPath, "", nil)
 	cookies := resp.Cookies()
 	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/" || len(cookies) != 1 {
 		t.Fatal("launch exchange failed")
+	}
+	resp.Body.Close()
+	resp = httpCall(t, info, "GET", launchPath, "", nil)
+	if resp.StatusCode != http.StatusUnauthorized || len(resp.Cookies()) != 0 || resp.Header.Get("Location") != "" {
+		t.Fatal("replayed launch code issued a cookie or redirect")
 	}
 	resp.Body.Close()
 	browser := func(r *http.Request) { r.AddCookie(cookies[0]) }
@@ -196,6 +202,24 @@ func TestHTTPDiscoveryAdmissionAndProductAuthentication(t *testing.T) {
 		t.Fatal("session read failed")
 	}
 	resp.Body.Close()
+	for _, csrf := range []string{"", "invalid-csrf-fixture"} {
+		resp = httpCall(t, info, "PATCH", path, `{"importClaudeSkills":true}`, func(r *http.Request) {
+			browser(r)
+			r.Header.Set("Origin", info.Endpoint)
+			r.Header.Set("Content-Type", "application/json")
+			if csrf != "" {
+				r.Header.Set("X-Amaru-CSRF", csrf)
+			}
+		})
+		if resp.StatusCode != http.StatusForbidden {
+			t.Fatal("browser mutation with missing or invalid CSRF was admitted")
+		}
+		resp.Body.Close()
+	}
+	rejectedSettings, err := projects.Settings(context.Background(), key)
+	if err != nil || rejectedSettings.ImportClaudeSkills {
+		t.Fatal("rejected browser mutation changed settings")
+	}
 	resp = httpCall(t, info, "PATCH", path, `{"importClaudeSkills":true}`, func(r *http.Request) {
 		browser(r)
 		r.Header.Set("Origin", info.Endpoint)
@@ -236,7 +260,7 @@ func TestHTTPDiscoveryAdmissionAndProductAuthentication(t *testing.T) {
 		t.Fatal("lifecycle diagnostic consumer failed")
 	}
 	for _, secret := range []string{info.AdministratorSecret, launch.Code, cookies[0].Value, session.CSRF,
-		"opaque-query-fixture", "opaque-body-fixture", "opaque-bearer-fixture", "opaque-cookie-fixture", "untrusted-correlation-fixture"} {
+		"opaque-query-fixture", "opaque-body-fixture", "opaque-bearer-fixture", "opaque-cookie-fixture", "untrusted-correlation-fixture", "invalid-csrf-fixture"} {
 		if secret == "" || strings.Contains(logs.String(), secret) {
 			t.Fatal("empty fixture or credential/untrusted request data leaked to diagnostics")
 		}
@@ -250,7 +274,7 @@ func TestHTTPDiscoveryAdmissionAndProductAuthentication(t *testing.T) {
 	if len(productIdentity) != 0 || identity.InstanceID != "test-instance" || identity.CorrelationID == "" {
 		t.Fatal("rejected requests reached product or product identity missing")
 	}
-	statuses := map[int]int{503: 1, 401: 3, 403: 1, 201: 1, 303: 1, 200: 3}
+	statuses := map[int]int{503: 1, 401: 4, 403: 3, 201: 1, 303: 1, 200: 3}
 	seen := map[string]bool{}
 	matchedProduct := false
 	for _, line := range bytes.Split(bytes.TrimSpace(logs.Bytes()), []byte("\n")) {
