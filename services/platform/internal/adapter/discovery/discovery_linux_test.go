@@ -269,3 +269,17 @@ func TestPublishRejectsWrappedAdministratorSecret(t *testing.T) {
 		t.Fatal("invalid token created discovery state")
 	}
 }
+
+func TestPublishRejectsOversizedRecord(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "state")
+	p, err := Publish(dir, listener(t), fixtureSecret, strings.Repeat("<", 2000), time.Now())
+	if p != nil {
+		defer p.Close()
+	}
+	if !errors.Is(err, errUnsafe) || p != nil {
+		t.Fatal("accepted a record too large for the discovery reader")
+	}
+	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("oversized record created discovery state")
+	}
+}

@@ -20,6 +20,7 @@ import (
 
 const FileName = "instance.json"
 const lockName = "instance.lock"
+const maxRecordSize = 8192
 
 var ErrRunning = errors.New("an Instance already holds the discovery lock")
 var errUnsafe = errors.New("unsafe discovery state")
@@ -69,6 +70,10 @@ func Publish(dir string, listener net.Listener, secret, version string, started 
 	if !info.valid() {
 		return nil, errUnsafe
 	}
+	data, err := json.Marshal(info)
+	if err != nil || len(data)+1 > maxRecordSize {
+		return nil, errUnsafe
+	}
 	root, err := openPrivateDirectory(dir, true)
 	if err != nil {
 		return nil, err
@@ -84,7 +89,7 @@ func Publish(dir string, listener net.Listener, secret, version string, started 
 		return nil, err
 	}
 	p := &Publication{root: root, lock: lock, info: info}
-	if err = p.write(); err != nil {
+	if err = p.write(append(data, '\n')); err != nil {
 		p.release()
 		return nil, err
 	}
@@ -112,7 +117,7 @@ func privateFile(root *os.Root, name string, flags int) (*os.File, error) {
 	}
 	return f, nil
 }
-func (p *Publication) write() error {
+func (p *Publication) write(data []byte) error {
 	if st, err := p.root.Lstat(FileName); err == nil {
 		if !private(st, false) {
 			return errUnsafe
@@ -135,10 +140,7 @@ func (p *Publication) write() error {
 			return errUnsafe
 		}
 		defer p.root.Remove(name)
-		data, err := json.Marshal(p.info)
-		if err == nil {
-			_, err = f.Write(append(data, '\n'))
-		}
+		_, err = f.Write(data)
 		if err == nil {
 			err = f.Sync()
 		}
@@ -188,8 +190,8 @@ func read(root *os.Root) (Info, error) {
 	}
 	defer f.Close()
 	var info Info
-	data, err := io.ReadAll(io.LimitReader(f, 8193))
-	if err != nil || len(data) > 8192 {
+	data, err := io.ReadAll(io.LimitReader(f, maxRecordSize+1))
+	if err != nil || len(data) > maxRecordSize {
 		return Info{}, errUnsafe
 	}
 	d := json.NewDecoder(bytes.NewReader(data))
