@@ -65,3 +65,10 @@ or successful protocol use after upgrade. PostgreSQL, real Providers, native
 macOS/Windows runtime and a browser were not run for this status-only change;
 cross-platform vet in `make check` is not native runtime evidence. The earlier
 Worker timeout recorded for PR #413 is not represented as fixed by this slice.
+
+## Informational header after a final response
+
+The live HTTP regression sends a 103 after a 204. The baseline forwarded the
+late header to net/http, which emitted an unstructured server diagnostic.
+The wrapper now suppresses it and retains 204 on the wire and in the structured
+request record. The same test still covers forwarding 103 before a final response.
