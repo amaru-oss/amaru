@@ -505,3 +505,20 @@ func TestHTTPLogErrorCallbackPanicOmitsRawDiagnostic(t *testing.T) {
 		})
 	}
 }
+
+func TestHTTPUnsupportedFlushLeavesStatusOpen(t *testing.T) {
+	var output bytes.Buffer
+	logger, _ := New(&output)
+	recorder := httptest.NewRecorder()
+	writer := struct{ http.ResponseWriter }{recorder}
+	logger.HTTP("instance", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if err := http.NewResponseController(w).Flush(); !errors.Is(err, http.ErrNotSupported) {
+			t.Fatalf("flush = %v, want ErrNotSupported", err)
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}), func(err error) { t.Error(err) }).ServeHTTP(writer, httptest.NewRequest(http.MethodGet, "/", nil))
+	recs := records(t, &output)
+	if recorder.Code != http.StatusServiceUnavailable || len(recs) != 1 || recs[0]["status"] != float64(http.StatusServiceUnavailable) {
+		t.Fatalf("response = %d, diagnostic = %v", recorder.Code, recs)
+	}
+}

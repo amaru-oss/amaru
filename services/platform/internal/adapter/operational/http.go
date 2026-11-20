@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	"errors"
 	"net"
 	"net/http"
 )
@@ -109,10 +110,11 @@ func (w *response) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return conn, rw, err
 }
 func (w *response) FlushError() error {
-	if !w.wrote {
-		w.WriteHeader(http.StatusOK)
-	}
 	err := http.NewResponseController(w.ResponseWriter).Flush()
+	if !w.wrote && !errors.Is(err, http.ErrNotSupported) {
+		w.status = http.StatusOK
+		w.wrote = true
+	}
 	if err != nil {
 		w.ioFailed = true
 	}
