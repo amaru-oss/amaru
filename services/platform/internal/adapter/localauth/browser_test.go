@@ -51,14 +51,16 @@ func TestFirefoxLaunchSessionAndLogout(t *testing.T) {
 (async()=>{try {
  const s=await fetch('/v1/auth/session');if(s.status!==200)throw 1;const session=await s.json();
  if(document.cookie.includes('amaru_session'))throw 2;
- const reject=await fetch('/probe',{method:'POST'});if(reject.status!==403)throw 3;
- const ok=await fetch('/probe',{method:'POST',headers:{'X-Amaru-CSRF':session.csrfToken}});if(ok.status!==204)throw 4;
+ const rejectedLogout=await fetch('/v1/auth/session',{method:'DELETE'});if(rejectedLogout.status!==403)throw 3;
+ if((await fetch('/v1/auth/session')).status!==200)throw 4;
+ const reject=await fetch('/probe',{method:'POST'});if(reject.status!==403)throw 5;
+ const ok=await fetch('/probe',{method:'POST',headers:{'X-Amaru-CSRF':session.csrfToken}});if(ok.status!==204)throw 6;
  const ws=new WebSocket('ws://'+location.host+'/events');
  await new Promise((resolve,reject)=>{ws.onopen=resolve;ws.onerror=reject});
  const closed=new Promise(resolve=>ws.onclose=resolve);
- const logout=await fetch('/v1/auth/session',{method:'DELETE',headers:{'X-Amaru-CSRF':session.csrfToken}});if(logout.status!==204)throw 5;
+ const logout=await fetch('/v1/auth/session',{method:'DELETE',headers:{'X-Amaru-CSRF':session.csrfToken}});if(logout.status!==204)throw 7;
  await closed;
- if((await fetch('/v1/auth/session')).status!==401)throw 6;
+ if((await fetch('/v1/auth/session')).status!==401)throw 8;
  await fetch('/v1/health?result=ok');
 } catch {await fetch('/v1/health?result=failed')}})();</script>`)
 				case "/probe":
