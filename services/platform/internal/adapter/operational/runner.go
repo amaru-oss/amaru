@@ -34,7 +34,7 @@ func ObserveRunner(instanceID string, next embedded.Runner, queue chan<- RunnerR
 				return
 			}
 			select {
-			case queue <- RunnerRecord{Identity: id, Record: Record{Operation: "worker.runner", Outcome: outcome}}:
+			case queue <- RunnerRecord{Identity: id, Record: runnerRecord(outcome)}:
 			default:
 			}
 		}
@@ -66,4 +66,12 @@ func ObserveRunner(instanceID string, next embedded.Runner, queue chan<- RunnerR
 		returned = true
 		return out
 	}), nil
+}
+
+func runnerRecord(outcome string) Record {
+	rec := Record{Operation: "worker.runner", Outcome: outcome}
+	if outcome == "failed" {
+		rec.Cause = "Provider reported failure"
+	}
+	return rec
 }
