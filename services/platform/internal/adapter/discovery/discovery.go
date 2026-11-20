@@ -43,6 +43,10 @@ func (i Info) valid() bool {
 	if ip == nil || !ip.IsLoopback() || i.Port < 1 || i.Port > 65535 || u.Host != net.JoinHostPort(u.Hostname(), strconv.Itoa(i.Port)) {
 		return false
 	}
+	// The decoder ignores line breaks; discovery must publish a usable bearer token.
+	if len(i.AdministratorSecret) != base64.RawURLEncoding.EncodedLen(32) {
+		return false
+	}
 	b, err := base64.RawURLEncoding.Strict().DecodeString(i.AdministratorSecret)
 	return err == nil && len(b) == 32 && i.PID > 0 && i.ProtocolVersion == 1 && i.PlatformVersion != "" && !i.StartedAt.IsZero()
 }

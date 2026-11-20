@@ -256,3 +256,16 @@ func TestDiscoveryRejectsEmptyURLDelimiters(t *testing.T) {
 		}
 	}
 }
+
+func TestPublishRejectsWrappedAdministratorSecret(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "state")
+	if p, err := Publish(dir, listener(t), fixtureSecret[:16]+"\r\n"+fixtureSecret[16:], "test", time.Now()); !errors.Is(err, errUnsafe) {
+		if p != nil {
+			p.Close()
+		}
+		t.Fatal("accepted a discovery token that cannot be sent in an HTTP header")
+	}
+	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("invalid token created discovery state")
+	}
+}
