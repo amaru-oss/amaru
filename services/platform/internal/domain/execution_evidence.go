@@ -219,6 +219,9 @@ func BuildExecutionEvidence(in ExecutionEvidenceInput) (ExecutionEvidence, error
 	}
 	approvals := make(map[string]bool, len(in.Approvals))
 	for _, a := range in.Approvals {
+		if a.ProjectID != in.Execution.ProjectID {
+			return ExecutionEvidence{}, invalid("evidence: approval project does not match execution")
+		}
 		if a.Gate.ExecutionID != id {
 			return ExecutionEvidence{}, invalid("evidence: approval %s gates execution %s, not %s", a.ID, a.Gate.ExecutionID, id)
 		}
@@ -228,6 +231,9 @@ func BuildExecutionEvidence(in ExecutionEvidenceInput) (ExecutionEvidence, error
 		approvals[a.ID] = true
 	}
 	for _, ev := range in.Audit {
+		if ev.ProjectID != in.Execution.ProjectID {
+			return ExecutionEvidence{}, invalid("evidence: approval audit project does not match execution")
+		}
 		if ev.TargetType != "approval" || !approvals[ev.TargetID] {
 			return ExecutionEvidence{}, invalid("evidence: audit entry %d (%s %s) is not about an approval of execution %s", ev.Seq, ev.TargetType, ev.TargetID, id)
 		}

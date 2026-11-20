@@ -26,7 +26,7 @@ func TestExecutionEvidenceOwnsItsHashedContents(t *testing.T) {
 			in.Approvals[0].Decision = &ApprovalDecision{Rationale: "original"}
 			zero := uint64(0)
 			credits := 1.5
-			in.Usage = []ResultCapture{{ExecutionID: "e1", StepID: "e1.a", AttemptID: "a1", CapturedAt: at, Reports: []UsageReport{{
+			in.Usage = []ResultCapture{{ExecutionID: "e1", StepID: "e1.a", ProjectID: "p1", AttemptID: "a1", CapturedAt: at, Reports: []UsageReport{{
 				Provider: "original", InputTokens: &IntMeasurement{Source: UsageReported, Value: &zero},
 				Credits: &DoubleMeasurement{Source: UsageReported, Value: &credits},
 				Cost:    &Cost{Source: UsageReported, Amount: "1.00", Currency: "USD"},
@@ -85,14 +85,14 @@ func evidenceInput(t *testing.T) ExecutionEvidenceInput {
 		t.Fatal(err)
 	}
 	return ExecutionEvidenceInput{
-		Execution: Execution{ID: "e1", State: ExecSucceeded, CreatedAt: at},
+		Execution: Execution{ID: "e1", ProjectID: "p1", State: ExecSucceeded, CreatedAt: at},
 		Steps: []StepExecution{
 			{ID: "e1.a", ExecutionID: "e1", State: StepSucceeded, InputsJSON: []byte(`{"token":"s3cret"}`)},
 			{ID: "e1.b", ExecutionID: "e1", State: StepSucceeded},
 		},
 		Events:    []ExecutionEvent{{ExecutionID: "e1", Seq: 1, Kind: EventStepLeased, StepID: "e1.a", At: at}},
 		Approvals: []Approval{ap},
-		Audit:     []AuditEvent{{Seq: 3, At: at, Kind: AuditApprovalRequested, Actor: "u1", ActorKind: ActorHuman, TargetType: "approval", TargetID: "e1.a"}},
+		Audit:     []AuditEvent{{Seq: 3, At: at, Kind: AuditApprovalRequested, Actor: "u1", ActorKind: ActorHuman, TargetType: "approval", TargetID: "e1.a", ProjectID: "p1"}},
 		Contexts:  []StepContext{{ExecutionID: "e1", StepID: "e1.a", Format: ContextFormat, Hash: ContentHash([]byte("doc")), Document: "doc", CreatedAt: at}},
 		Artifacts: []ArtifactVersion{
 			{ArtifactID: "z", Version: 1, ExecutionID: "e1", StepID: "e1.a"},
@@ -381,6 +381,23 @@ func TestBuildExecutionEvidenceRejectsAmbiguousSteps(t *testing.T) {
 			}
 			if !reflect.DeepEqual(b, ExecutionEvidence{}) {
 				t.Fatal("ambiguous attribution returned a partial bundle")
+			}
+		})
+	}
+}
+
+func TestBuildExecutionEvidenceRejectsCrossProjectApprovalRecords(t *testing.T) {
+	for _, mismatch := range []string{"approval", "audit"} {
+		t.Run(mismatch, func(t *testing.T) {
+			in := evidenceInput(t)
+			if mismatch == "approval" {
+				in.Approvals[0].ProjectID = "p2"
+			} else {
+				in.Audit[0].ProjectID = "p2"
+			}
+			b, err := BuildExecutionEvidence(in)
+			if !errors.Is(err, ErrInvalid) || !reflect.DeepEqual(b, ExecutionEvidence{}) {
+				t.Fatal("cross-Project record returned Evidence")
 			}
 		})
 	}
