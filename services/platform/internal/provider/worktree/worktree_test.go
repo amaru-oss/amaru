@@ -751,10 +751,18 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestAgentInItsWorktreeCannotWriteTheCheckout(t *testing.T) {
+func TestAgentInItsWorktreeCannotWriteOutsideIt(t *testing.T) {
 	e := newEnv(t)
 	ws := domain.Workspace{Key: "WI-1", Branch: branch, Base: "main"}
 	if _, err := e.r.Prepare(context.Background(), ws.Key, ws.Branch); err != nil {
+		t.Fatal(err)
+	}
+	sibling, err := e.r.Prepare(context.Background(), "WI-2", "feature/wi-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	siblingDir, err := e.r.Dir(sibling)
+	if err != nil {
 		t.Fatal(err)
 	}
 	c, err := e.r.Confinement(ws)
@@ -771,8 +779,8 @@ func TestAgentInItsWorktreeCannotWriteTheCheckout(t *testing.T) {
 	if err != nil {
 		t.Skip("no sh")
 	}
-	run := func(script string) (string, error) {
-		p, err := runner.Start(context.Background(), ports.ProcSpec{Path: sh, Args: []string{"-c", script}, Dir: dir, Confine: &c})
+	run := func(script string, targets ...string) (string, error) {
+		p, err := runner.Start(context.Background(), ports.ProcSpec{Path: sh, Args: append([]string{"-c", script, "sh"}, targets...), Dir: dir, Confine: &c})
 		if err != nil {
 			return "", err
 		}
@@ -780,18 +788,24 @@ func TestAgentInItsWorktreeCannotWriteTheCheckout(t *testing.T) {
 		p.Wait()
 		return string(out), nil
 	}
-	out, err := run("echo hi > in-worktree && echo wrote-inside; echo x > " + filepath.Join(e.repo, "in-checkout") + " 2>/dev/null || echo blocked-checkout")
+	checkoutFile := filepath.Join(e.repo, "in-checkout")
+	siblingFile := filepath.Join(siblingDir, "in-sibling")
+	out, err := run(`echo hi > in-worktree && echo wrote-inside
+{ echo x > "$1"; } 2>/dev/null || echo blocked-checkout
+{ echo x > "$2"; } 2>/dev/null || echo blocked-sibling`, checkoutFile, siblingFile)
 	if errors.Is(err, ports.ErrConfinementUnavailable) {
 		t.Skipf("write confinement is not available on this host: %v", err)
 	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "wrote-inside") || !strings.Contains(out, "blocked-checkout") {
+	if !strings.Contains(out, "wrote-inside") || !strings.Contains(out, "blocked-checkout") || !strings.Contains(out, "blocked-sibling") {
 		t.Fatalf("agent output %q", out)
 	}
-	if _, err := os.Stat(filepath.Join(e.repo, "in-checkout")); err == nil {
-		t.Fatal("the agent wrote into the Project checkout")
+	for _, path := range []string{checkoutFile, siblingFile} {
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("path outside the assigned worktree must stay absent: %v", err)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(dir, "in-worktree")); err != nil {
 		t.Fatalf("the agent could not write in its worktree: %v", err)
