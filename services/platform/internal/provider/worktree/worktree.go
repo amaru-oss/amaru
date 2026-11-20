@@ -202,7 +202,7 @@ func (r *Repo) git(ctx context.Context, dir string, args ...string) (string, err
 		_, _ = io.Copy(io.Discard, proc.Stderr())
 		close(done)
 	}()
-	_, _ = io.Copy(&out, io.LimitReader(proc.Stdout(), maxStdout))
+	_, _ = io.Copy(&out, io.LimitReader(proc.Stdout(), maxStdout+1))
 	_, _ = io.Copy(io.Discard, proc.Stdout())
 	<-done
 	code, err := proc.Wait()
@@ -211,6 +211,9 @@ func (r *Repo) git(ctx context.Context, dir string, args ...string) (string, err
 	}
 	if code != 0 {
 		return out.String(), &ExitError{Code: code, Cmd: args[0], Stderr: strings.TrimSpace(errb.String())}
+	}
+	if out.Len() > maxStdout && (args[0] == "diff" || args[0] == "status") {
+		return "", fmt.Errorf("git %s: output exceeds %d bytes", args[0], maxStdout)
 	}
 	return out.String(), nil
 }
@@ -529,9 +532,12 @@ func (r *Repo) Sync(ctx context.Context, ws domain.Workspace, mergeBase bool) (d
 		msg := fmt.Sprintf("Merge %s into %s\n\nBase refresh (base %s).", r.base, ws.Branch, res.Base)
 		if _, err := r.git(ctx, dir, "-c", "user.name="+r.identity.Name, "-c", "user.email="+r.identity.Email,
 			"merge", "--no-ff", "--no-verify", "--no-edit", "-q", "-m", msg, res.Base); err != nil {
-			out, _ := r.git(ctx, dir, "diff", "--name-only", "-z", "--diff-filter=U")
+			out, diffErr := r.git(ctx, dir, "diff", "--name-only", "-z", "--diff-filter=U")
 			if _, aerr := r.git(ctx, dir, "merge", "--abort"); aerr != nil {
 				return res, fmt.Errorf("%w; abort: %v", err, aerr)
+			}
+			if diffErr != nil {
+				return res, errors.Join(err, diffErr)
 			}
 			res.Conflicts = paths(out)
 			if len(res.Conflicts) == 0 {
