@@ -151,12 +151,14 @@ func (r *Repo) Dir(ws domain.Workspace) (string, error) {
 // root (osproc.Runner.Forbidden), so no agent can be given write access to it.
 func (r *Repo) Checkout() string { return r.dir }
 
-// Confinement is the write restriction for an agent working in ws: its worktree is the only
+// Confinement verifies the prepared worktree and returns its write restriction: it is the only
 // writable root (ADR-0056 item 7, ADR-0057). It does not let the agent commit: git writes to the
 // shared repository under the Project checkout, which stays outside the root, so the Worker
 // commits and pushes on the agent's behalf.
-func (r *Repo) Confinement(ws domain.Workspace) (ports.Confinement, error) {
-	dir, err := r.Dir(ws)
+func (r *Repo) Confinement(ctx context.Context, ws domain.Workspace) (ports.Confinement, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	dir, err := r.existing(ctx, ws)
 	if err != nil {
 		return ports.Confinement{}, err
 	}
