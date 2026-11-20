@@ -31,7 +31,7 @@ func (l *Logger) HTTP(instanceID string, next http.Handler, onError func(error))
 			if recovered == http.ErrAbortHandler {
 				outcome, cause = "failed", "response_aborted"
 			}
-			if recovered != nil {
+			if recovered != nil && !rw.wrote {
 				rw.status = 0
 			}
 			if err := l.Write(ctx, Record{Operation: "http.request", Outcome: outcome, Cause: cause, Status: rw.status}); err != nil {
