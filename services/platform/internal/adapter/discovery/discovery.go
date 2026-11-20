@@ -36,7 +36,7 @@ type Info struct {
 
 func (i Info) valid() bool {
 	u, err := url.Parse(i.Endpoint)
-	if err != nil || u.Scheme != "http" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" {
+	if err != nil || u.Scheme != "http" || u.User != nil || u.Path != "" || u.Opaque != "" || strings.ContainsAny(i.Endpoint, "?#") {
 		return false
 	}
 	ip := net.ParseIP(u.Hostname())
@@ -244,5 +244,5 @@ func Live(ctx context.Context, info Info) bool {
 	if d.Decode(&extra) != io.EOF {
 		return false
 	}
-	return health.Status == "ok" && health.ProtocolVersion == info.ProtocolVersion && health.PlatformVersion == info.PlatformVersion && health.StartedAt.Equal(info.StartedAt) && health.UptimeSec != nil && *health.UptimeSec >= 0 && !strings.Contains(info.Endpoint, "?")
+	return health.Status == "ok" && health.ProtocolVersion == info.ProtocolVersion && health.PlatformVersion == info.PlatformVersion && health.StartedAt.Equal(info.StartedAt) && health.UptimeSec != nil && *health.UptimeSec >= 0
 }
