@@ -232,21 +232,19 @@ func (r *Repo) Prepare(ctx context.Context, key, branch string) (domain.Workspac
 	if err := ws.Validate(); err != nil {
 		return domain.Workspace{}, err
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	dir, err := r.Dir(ws)
 	if err != nil {
 		return domain.Workspace{}, err
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	if _, err := os.Lstat(dir); err == nil {
-		if _, err := os.Lstat(filepath.Join(dir, ".git")); err != nil {
-			return domain.Workspace{}, fmt.Errorf("%w: %s exists and is not a worktree", domain.ErrConflict, key)
+		if err := r.verify(ctx, ws, dir); err != nil {
+			return domain.Workspace{}, err
 		}
-		head, err := r.git(ctx, dir, "rev-parse", "--abbrev-ref", "HEAD")
-		if err == nil && strings.TrimSpace(head) == branch {
-			return ws, nil
-		}
-		return domain.Workspace{}, fmt.Errorf("%w: worktree %s exists but is not on branch %s", domain.ErrConflict, key, branch)
+		return ws, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return domain.Workspace{}, err
 	}
 	if _, err := r.git(ctx, r.dir, "fetch", remote, "+refs/heads/"+r.base+":refs/remotes/"+remote+"/"+r.base); err != nil {
 		return domain.Workspace{}, err
@@ -266,7 +264,7 @@ func (r *Repo) Prepare(ctx context.Context, key, branch string) (domain.Workspac
 }
 
 // existing returns the directory of a prepared worktree.
-func (r *Repo) existing(ws domain.Workspace) (string, error) {
+func (r *Repo) existing(ctx context.Context, ws domain.Workspace) (string, error) {
 	if err := ws.Validate(); err != nil {
 		return "", err
 	}
@@ -274,10 +272,54 @@ func (r *Repo) existing(ws domain.Workspace) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if _, err := os.Lstat(filepath.Join(dir, ".git")); err != nil {
-		return "", fmt.Errorf("%w: worktree %s", domain.ErrNotFound, ws.Key)
+	if _, err := os.Lstat(dir); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("%w: worktree %s", domain.ErrNotFound, ws.Key)
+		}
+		return "", err
+	}
+	if err := r.verify(ctx, ws, dir); err != nil {
+		return "", err
 	}
 	return dir, nil
+}
+
+// verify checks Git's repository identity and branch before operating on an existing path.
+// A linked worktree has a regular .git file and shares its Git directory with the checkout.
+func (r *Repo) verify(ctx context.Context, ws domain.Workspace, dir string) error {
+	marker, err := os.Lstat(filepath.Join(dir, ".git"))
+	if err != nil || !marker.Mode().IsRegular() {
+		return fmt.Errorf("%w: %s is not a linked worktree", domain.ErrConflict, ws.Key)
+	}
+	gitDir := func(checkout string) (os.FileInfo, error) {
+		path, err := r.git(ctx, checkout, "rev-parse", "--path-format=absolute", "--git-common-dir")
+		if err != nil {
+			return nil, err
+		}
+		return os.Stat(strings.TrimSuffix(path, "\n"))
+	}
+	project, err := gitDir(r.dir)
+	if err != nil {
+		return err
+	}
+	worktree, err := gitDir(dir)
+	if err != nil {
+		return err
+	}
+	if !os.SameFile(project, worktree) {
+		return fmt.Errorf("%w: worktree %s belongs to another repository", domain.ErrConflict, ws.Key)
+	}
+	head, err := r.git(ctx, dir, "symbolic-ref", "--quiet", "HEAD")
+	if code, ok := exitCode(err); ok && code == 1 {
+		return fmt.Errorf("%w: worktree %s has a detached HEAD", domain.ErrConflict, ws.Key)
+	}
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(head) != "refs/heads/"+ws.Branch {
+		return fmt.Errorf("%w: worktree %s is not on branch %s", domain.ErrConflict, ws.Key, ws.Branch)
+	}
+	return nil
 }
 
 type statusEntry struct {
@@ -312,12 +354,12 @@ func (r *Repo) status(ctx context.Context, dir string) ([]statusEntry, error) {
 // changes, and how many untracked files it holds.
 func (r *Repo) Head(ctx context.Context, ws domain.Workspace) (domain.WorktreeHead, error) {
 	var h domain.WorktreeHead
-	dir, err := r.existing(ws)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	dir, err := r.existing(ctx, ws)
 	if err != nil {
 		return h, err
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	sha, err := r.git(ctx, dir, "rev-parse", "HEAD")
 	if err != nil {
 		return h, err
@@ -339,12 +381,12 @@ func (r *Repo) Head(ctx context.Context, ws domain.Workspace) (domain.WorktreeHe
 
 // Changed lists the files the branch changes against the base.
 func (r *Repo) Changed(ctx context.Context, ws domain.Workspace) ([]string, error) {
-	dir, err := r.existing(ws)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	dir, err := r.existing(ctx, ws)
 	if err != nil {
 		return nil, err
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	out, err := r.git(ctx, dir, "diff", "--name-only", "-z", remote+"/"+r.base+"...HEAD")
 	if err != nil {
 		return nil, err
@@ -365,21 +407,15 @@ func paths(s string) []string {
 // discard it removes anyway and the Removal says what was thrown away, for the caller to record.
 // Ignored files are not counted as work. A worktree that is already gone is not an error.
 func (r *Repo) Remove(ctx context.Context, ws domain.Workspace, discard bool) (domain.Removal, error) {
-	if err := ws.Validate(); err != nil {
-		return domain.Removal{}, err
-	}
-	dir, err := r.Dir(ws)
-	if err != nil {
-		return domain.Removal{}, err
-	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, err := os.Lstat(dir); err != nil {
+	dir, err := r.existing(ctx, ws)
+	if errors.Is(err, domain.ErrNotFound) {
 		_, _ = r.git(ctx, r.dir, "worktree", "prune")
 		return domain.Removal{}, nil
 	}
-	if _, err := os.Lstat(filepath.Join(dir, ".git")); err != nil {
-		return domain.Removal{}, fmt.Errorf("%w: %s exists and is not a worktree", domain.ErrConflict, ws.Key)
+	if err != nil {
+		return domain.Removal{}, err
 	}
 	head, err := r.git(ctx, dir, "rev-parse", "HEAD")
 	if err != nil {
@@ -425,12 +461,12 @@ func (r *Repo) Remove(ctx context.Context, ws domain.Workspace, discard bool) (d
 // without force. It never rebases. A conflicting merge is aborted and the branch is as it was.
 func (r *Repo) Sync(ctx context.Context, ws domain.Workspace, mergeBase bool) (domain.BranchSync, error) {
 	var res domain.BranchSync
-	dir, err := r.existing(ws)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	dir, err := r.existing(ctx, ws)
 	if err != nil {
 		return res, err
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	// A merge left in progress (the Worker stopped between merge and abort) is ours: the worktree
 	// had no local edits when it started, so aborting it loses nothing.
 	if _, err := r.git(ctx, dir, "rev-parse", "-q", "--verify", "MERGE_HEAD"); err == nil {
