@@ -68,3 +68,7 @@ writes to its own Worktree. Attempts to write in the original checkout and the
 sibling Worktree fail, and both outside paths remain absent. This exercises
 the Worktree adapter and process runner together using local Git and shell.
 The test skips when the host lacks confinement support.
+
+## Follow-up
+
+The confinement helper verifies that the directory is a linked worktree of the Project on the requested branch before returning a writable root. The Linux Git integration test refuses both an absent directory and an unrelated directory at the expected path. These checks precede process launch and do not cover concurrent filesystem replacement.

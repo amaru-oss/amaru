@@ -196,7 +196,7 @@ func TestWorktreeDirectoryCannotAliasAnotherWorkItem(t *testing.T) {
 	commands := len(e.rec.argv)
 	for name, run := range map[string]func() error{
 		"Dir":         func() error { _, err := e.r.Dir(ws); return err },
-		"Confinement": func() error { _, err := e.r.Confinement(ws); return err },
+		"Confinement": func() error { _, err := e.r.Confinement(context.Background(), ws); return err },
 		"Prepare":     func() error { _, err := e.r.Prepare(context.Background(), ws.Key, ws.Branch); return err },
 		"Head":        func() error { _, err := e.r.Head(context.Background(), ws); return err },
 		"Changed":     func() error { _, err := e.r.Changed(context.Background(), ws); return err },
@@ -765,7 +765,7 @@ func TestAgentInItsWorktreeCannotWriteOutsideIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := e.r.Confinement(ws)
+	c, err := e.r.Confinement(context.Background(), ws)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -919,5 +919,19 @@ func TestChangedIncludesBothEndpointsOfRename(t *testing.T) {
 		if err != nil || !slices.Equal(got, want) {
 			t.Errorf("diff.renames=%s: Changed = %q, %v; want %q", setting, got, err, want)
 		}
+	}
+}
+
+func TestConfinementRequiresPreparedWorktree(t *testing.T) {
+	e := newEnv(t)
+	ws := domain.Workspace{Key: "missing", Branch: branch, Base: e.r.Base()}
+	if _, err := e.r.Confinement(context.Background(), ws); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("got %v, want ErrNotFound for an unprepared Work Item", err)
+	}
+	if err := os.Mkdir(filepath.Join(e.root, ws.Key), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.r.Confinement(context.Background(), ws); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("got %v, want ErrConflict for an unrelated directory", err)
 	}
 }
