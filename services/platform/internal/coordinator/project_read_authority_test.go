@@ -151,7 +151,12 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 						after()
 						indexFailure = failure
 					}
-					return []domain.ArtifactVersion{{ArtifactID: "report", ExecutionID: "execution", Version: 1, Hash: domain.ContentHash([]byte("content"))}}, indexFailure
+					return []domain.ArtifactVersion{{
+						ArtifactID: "report", Version: 1, ExecutionID: "execution",
+						StepID: "step", AttemptID: "attempt", Path: "report.txt",
+						Hash: domain.ContentHash([]byte("content")), Size: int64(len("content")),
+						CreatedAt: time.Unix(1, 0),
+					}}, indexFailure
 				}}
 				blobs := artifactBlobProbe{open: func(context.Context, string) (io.ReadCloser, error) {
 					after()

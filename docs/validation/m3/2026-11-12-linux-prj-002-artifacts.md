@@ -14,6 +14,9 @@ Verdict: **sound within accepted ADR-0062**. Platform state stays authoritative;
 
 The smaller option of trusting an Artifact ID or a caller-supplied hash cannot establish Project ownership. This boundary instead derives ownership from the persisted producing Execution and content identity from its indexed version. A returned reader is owned by its authorized caller; ongoing stream revocation is a future transport concern.
 
+Project Artifact reads validate the metadata of each owned version before returning the list or opening a blob. The fake-index regression covers a negative size alongside a valid version and checks that the caller receives neither partial metadata nor content.
+
+
 ## Commands and outcomes
 
 - `cd services/platform && go test -race -count=1 -run TestProjectArtifactAccess -v ./internal/coordinator`: **PASS**, exit 0; parent and seven subtests, no skips. Fake-backed application integration with the race detector.
