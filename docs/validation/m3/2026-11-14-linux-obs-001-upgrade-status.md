@@ -80,3 +80,8 @@ The Linux HTTP integration test also flushes a 204 response before hijacking the
 ## Unsupported flush
 
 `TestHTTPUnsupportedFlushLeavesStatusOpen` exercises a writer without flush support. A failed capability probe leaves the final status open, so the handler can still send a 503 and the operational record reports the same status.
+
+The `TestHTTPUnsupportedFlushAllowsFallback` and
+`TestHTTPUnsupportedHijackAllowsFallback` adapter regressions verify that
+`http.ErrNotSupported` leaves diagnostics to classify the actual fallback
+response. Errors from supported response I/O still produce failure records.

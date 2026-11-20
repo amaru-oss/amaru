@@ -104,14 +104,17 @@ func (w *response) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 			w.status = http.StatusSwitchingProtocols
 			w.wrote = true
 		}
-	} else {
+	} else if !errors.Is(err, http.ErrNotSupported) {
 		w.ioFailed = true
 	}
 	return conn, rw, err
 }
 func (w *response) FlushError() error {
 	err := http.NewResponseController(w.ResponseWriter).Flush()
-	if !w.wrote && !errors.Is(err, http.ErrNotSupported) {
+	if errors.Is(err, http.ErrNotSupported) {
+		return err
+	}
+	if !w.wrote {
 		w.status = http.StatusOK
 		w.wrote = true
 	}
