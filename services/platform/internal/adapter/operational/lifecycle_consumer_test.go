@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -65,6 +66,36 @@ func TestLifecycleConsumerCancellationAndInvalidComposition(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("idle consumer did not stop")
 	}
+}
+
+func TestLifecycleConsumerCancellationWinsAgainstClosedQueue(t *testing.T) {
+	var sink bytes.Buffer
+	logger, _ := New(&sink)
+	trusted := WithIdentity(context.Background(), Identity{InstanceID: "instance", CorrelationID: "lifecycle"})
+	for range 20 {
+		ctx := &cancelAfterInitialErr{Context: trusted, done: closedContext}
+		queue := make(chan Record)
+		close(queue)
+		if err := logger.ConsumeLifecycle(ctx, queue); !errors.Is(err, context.Canceled) {
+			t.Fatal("closed queue won over canceled context")
+		}
+	}
+}
+
+var closedContext = func() <-chan struct{} { ch := make(chan struct{}); close(ch); return ch }()
+
+type cancelAfterInitialErr struct {
+	context.Context
+	done  <-chan struct{}
+	calls atomic.Int32
+}
+
+func (c *cancelAfterInitialErr) Done() <-chan struct{} { return c.done }
+func (c *cancelAfterInitialErr) Err() error {
+	if c.calls.Add(1) == 1 {
+		return nil
+	}
+	return context.Canceled
 }
 
 func TestLifecycleConsumerSinkFailureIsSafe(t *testing.T) {
