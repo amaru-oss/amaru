@@ -644,3 +644,93 @@ func TestHTTPUnexpectedServeExitFailsLifecycle(t *testing.T) {
 		t.Fatal("failed server retained publication after join")
 	}
 }
+
+type disconnectSettingsStore struct {
+	*fakes.ProjectStore
+	entered      chan operational.Identity
+	disconnected chan struct{}
+}
+
+func (s disconnectSettingsStore) Settings(ctx context.Context, key domain.ProjectKey) (domain.ProjectSettings, error) {
+	settings, err := s.ProjectStore.Settings(ctx, key)
+	s.entered <- operational.IdentityFrom(ctx)
+	<-ctx.Done()
+	close(s.disconnected)
+	return settings, err
+}
+
+func TestHTTPSettingsClientDisconnectDiagnostic(t *testing.T) {
+	l, err := NewLifecycle(time.Now().Add(3*time.Second), time.Second, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := disconnectSettingsStore{
+		ProjectStore: fakes.NewProjectStore(),
+		entered:      make(chan operational.Identity, 1),
+		disconnected: make(chan struct{}),
+	}
+	key := domain.ProjectKey("id:01ARZ3NDEKTSV4RRFFQ69G5FAV")
+	if err := store.Create(context.Background(), domain.Project{Key: key, Name: "one", CreatedAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	h, logs := httpOwner(t, filepath.Join(t.TempDir(), "state"), l, func(auth *localauth.Auth) (http.Handler, error) {
+		access, err := coordinator.NewProjectAccess(coordinator.New(fakes.NewExecutionStore(), time.Now), store, auth.Principal)
+		if err != nil {
+			return nil, err
+		}
+		return httpapi.SettingsHandler(auth, access, store)
+	})
+	h.config.OnLogError = func(error) { t.Error("safe diagnostic write failed") }
+	stop, done := startHTTP(t, h)
+	info := readyHTTP(t, h)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	const queryFixture = "disconnect-query-fixture"
+	const correlationFixture = "disconnect-correlation-fixture"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, info.Endpoint+"/v1/projects/"+url.PathEscape(string(key))+"/settings?private="+queryFixture, nil)
+	if err != nil {
+		t.Fatal("request creation failed")
+	}
+	req.Header.Set("Authorization", "Bearer "+info.AdministratorSecret)
+	req.Header.Set("X-Correlation-ID", correlationFixture)
+	client := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+	clientDone := make(chan error, 1)
+	go func() {
+		resp, err := client.Do(req)
+		if resp != nil {
+			resp.Body.Close()
+		}
+		clientDone <- err
+	}()
+	var identity operational.Identity
+	select {
+	case identity = <-store.entered:
+	case <-ctx.Done():
+		t.Fatal("authenticated settings read did not reach the store")
+	}
+	cancel()
+	if err := result(t, clientDone); !errors.Is(err, context.Canceled) {
+		t.Fatal("client did not report request cancellation")
+	}
+	// Observe server-side cancellation before shutdown can cancel active requests.
+	wait(t, store.disconnected)
+	// The HTTP owner joins handlers before shutdown completes.
+	stop()
+	if err := result(t, done); err != nil {
+		t.Fatal("shutdown failed")
+	}
+
+	for _, value := range []string{info.AdministratorSecret, queryFixture, correlationFixture} {
+		if value == "" || strings.Contains(logs.String(), value) {
+			t.Fatal("credential or untrusted data leaked to diagnostics")
+		}
+	}
+	var record map[string]any
+	if json.Unmarshal(bytes.TrimSpace(logs.Bytes()), &record) != nil ||
+		identity.CorrelationID == "" || record["correlationId"] != identity.CorrelationID ||
+		record["instanceId"] != "test-instance" || record["operation"] != "http.request" ||
+		record["outcome"] != "rejected" || record["cause"] != "request_canceled" {
+		t.Fatal("missing correlated client-disconnect rejection diagnostic")
+	}
+}

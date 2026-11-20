@@ -42,7 +42,7 @@ func TestHTTPCancellationDiagnostics(t *testing.T) {
 				recs := records(t, &output)
 				wantOutcome := "canceled"
 				if status >= 400 {
-					wantOutcome, wantCause = "rejected", ""
+					wantOutcome = "rejected"
 				}
 				if len(recs) != 1 || recs[0]["outcome"] != wantOutcome || recs[0]["status"] != float64(status) || response.Code != status {
 					t.Fatalf("response %d, records %v", response.Code, recs)
