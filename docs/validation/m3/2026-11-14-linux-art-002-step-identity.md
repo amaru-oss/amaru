@@ -119,3 +119,7 @@ merges are part of this work. Linux-first M3 policy remains in force.
 ## Step ownership before secondary reads
 
 `TestBundleRejectsMismatchedStoreIdentity` supplies a foreign Step from the initial Execution lookup. The reader returns no Evidence and performs no secondary reads. The domain builder still checks each Step when called directly.
+
+`TestBundleRejectsForeignApprovalBeforeAuditRead` verifies that Approval rows
+for another Project or Execution, or an unknown Step, fail the Evidence read
+before the reader queries the audit log.
