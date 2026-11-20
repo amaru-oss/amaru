@@ -411,3 +411,25 @@ func TestBuildExecutionEvidenceRejectsInvalidArtifact(t *testing.T) {
 		t.Fatalf("invalid artifact returned Evidence: %+v, %v", got, err)
 	}
 }
+
+func TestBuildExecutionEvidenceRejectsInvalidEventSequence(t *testing.T) {
+	for name, sequences := range map[string][]int64{
+		"non-positive": {0},
+		"duplicate":    {1, 1},
+		"reversed":     {2, 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			in := evidenceInput(t)
+			event := in.Events[0]
+			in.Events = nil
+			for _, seq := range sequences {
+				event.Seq = seq
+				in.Events = append(in.Events, event)
+			}
+			got, err := BuildExecutionEvidence(in)
+			if !errors.Is(err, ErrInvalid) || !reflect.DeepEqual(got, ExecutionEvidence{}) {
+				t.Fatalf("invalid Event sequence returned Evidence: %v", err)
+			}
+		})
+	}
+}
