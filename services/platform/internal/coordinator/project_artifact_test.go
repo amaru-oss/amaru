@@ -141,6 +141,24 @@ func TestProjectArtifactAccess(t *testing.T) {
 			t.Fatalf("content: %v %v", r, err)
 		}
 	})
+	t.Run("invalid owned content hash returns no metadata or blob", func(t *testing.T) {
+		bad := first
+		bad.Hash = "not-a-content-hash"
+		index := artifactIndexProbe{read: func(context.Context, string) ([]domain.ArtifactVersion, error) {
+			return []domain.ArtifactVersion{bad}, nil
+		}}
+		blobs := artifactBlobProbe{open: func(context.Context, string) (io.ReadCloser, error) {
+			t.Fatal("opened content for an invalid hash")
+			return nil, nil
+		}}
+		if got, err := api.ArtifactVersions(ctx, a, "report", index); err != domain.ErrNotFound || got != nil {
+			t.Errorf("versions: %+v %v", got, err)
+		}
+		if r, err := api.ArtifactContent(ctx, a, "report", first.Version, index, blobs); err != domain.ErrNotFound || r != nil {
+			t.Fatalf("content: %v %v", r, err)
+		}
+	})
+
 	t.Run("authorization precedes index IO", func(t *testing.T) {
 		unread := artifactIndexProbe{read: func(context.Context, string) ([]domain.ArtifactVersion, error) {
 			t.Fatal("unauthorized index read")
