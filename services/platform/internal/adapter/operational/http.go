@@ -28,6 +28,9 @@ func (l *Logger) HTTP(instanceID string, next http.Handler, onError func(error))
 				}
 			}()
 			recovered := recover()
+			if recovered == http.ErrAbortHandler {
+				outcome, cause = "failed", "response_aborted"
+			}
 			if recovered != nil {
 				rw.status = 0
 			}

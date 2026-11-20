@@ -72,3 +72,26 @@ func TestHTTPResponseIOFailureDiagnostics(t *testing.T) {
 		})
 	}
 }
+
+func TestHTTPDeliberateAbortDiagnostic(t *testing.T) {
+	var output bytes.Buffer
+	logger, err := New(&output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := logger.HTTP("instance", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic(http.ErrAbortHandler)
+	}), func(err error) { t.Error(err) })
+	func() {
+		defer func() {
+			if got := recover(); got != http.ErrAbortHandler {
+				t.Errorf("abort was not forwarded as http.ErrAbortHandler")
+			}
+		}()
+		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil))
+	}()
+	recs := records(t, &output)
+	if len(recs) != 1 || recs[0]["outcome"] != "failed" || recs[0]["cause"] != "response_aborted" || recs[0]["status"] != nil {
+		t.Fatalf("unexpected abort diagnostic: %v", recs)
+	}
+}
