@@ -23,6 +23,11 @@ func (l *Logger) ConsumeLifecycle(ctx context.Context, queue <-chan Record) erro
 		case <-ctx.Done():
 			return ctx.Err()
 		case rec, ok := <-queue:
+			// select may choose a ready queue case after cancellation became ready.
+			// Recheck before treating closure as a successful drain or writing a record.
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			if !ok {
 				return nil
 			}
