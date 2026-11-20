@@ -273,6 +273,9 @@ func (r *Repo) existing(ctx context.Context, ws domain.Workspace) (string, error
 	if err := ws.Validate(); err != nil {
 		return "", err
 	}
+	if ws.Base != r.base {
+		return "", fmt.Errorf("%w: worktree %s has a different base branch", domain.ErrConflict, ws.Key)
+	}
 	dir, err := r.Dir(ws)
 	if err != nil {
 		return "", err
