@@ -433,3 +433,15 @@ func TestBuildExecutionEvidenceRejectsInvalidEventSequence(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildExecutionEvidenceRejectsDuplicateArtifactVersion(t *testing.T) {
+	in := evidenceInput(t)
+	duplicate := in.Artifacts[0]
+	duplicate.StepID = in.Steps[1].ID
+	duplicate.Hash = ContentHash([]byte("different output"))
+	in.Artifacts = append(in.Artifacts, duplicate)
+	got, err := BuildExecutionEvidence(in)
+	if !errors.Is(err, ErrInvalid) || !reflect.DeepEqual(got, ExecutionEvidence{}) {
+		t.Fatalf("ambiguous Artifact version returned Evidence: %v", err)
+	}
+}
