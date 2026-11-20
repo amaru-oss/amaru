@@ -55,6 +55,14 @@ func (s *executionRead) Audit(_ context.Context, after int64, limit int) ([]doma
 	return nil, nil
 }
 
+type foreignStepRead struct {
+	ports.ExecutionStore
+}
+
+func (foreignStepRead) Get(context.Context, string) (domain.Execution, []domain.StepExecution, error) {
+	return domain.Execution{ID: "e1"}, []domain.StepExecution{{ID: "s1", ExecutionID: "other-execution"}}, nil
+}
+
 type contextRead struct {
 	ports.ContextStore
 	get func(string, string) (domain.StepContext, error)
@@ -92,6 +100,12 @@ func TestBundleRejectsMismatchedStoreIdentity(t *testing.T) {
 	t.Run("execution", func(t *testing.T) {
 		r, s := readerFixture()
 		s.id = "other-execution"
+		b, err := r.Bundle(context.Background(), "e1")
+		assertNoBundle(t, b, err, domain.ErrInvalid)
+	})
+	t.Run("step execution before secondary reads", func(t *testing.T) {
+		r, _ := readerFixture()
+		r.Executions = foreignStepRead{}
 		b, err := r.Bundle(context.Background(), "e1")
 		assertNoBundle(t, b, err, domain.ErrInvalid)
 	})

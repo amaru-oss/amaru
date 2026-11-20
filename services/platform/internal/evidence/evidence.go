@@ -48,6 +48,11 @@ func (r Reader) Bundle(ctx context.Context, executionID string) (domain.Executio
 	if e.ID != executionID {
 		return domain.ExecutionEvidence{}, fmt.Errorf("%w: evidence store returned a different execution", domain.ErrInvalid)
 	}
+	for _, step := range steps {
+		if step.ExecutionID != executionID {
+			return domain.ExecutionEvidence{}, fmt.Errorf("%w: evidence store returned a step for a different execution", domain.ErrInvalid)
+		}
+	}
 	in := domain.ExecutionEvidenceInput{Execution: e, Steps: steps}
 	if in.Events, err = r.Executions.Events(ctx, executionID); err != nil {
 		return domain.ExecutionEvidence{}, err
