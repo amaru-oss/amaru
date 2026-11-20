@@ -182,6 +182,13 @@ func TestSafeHealthProbe(t *testing.T) {
 			t.Fatal("unsafe endpoint accepted")
 		}
 	}
+	for _, delimiter := range []string{"?", "#"} {
+		bareDelimiter := info
+		bareDelimiter.Endpoint += delimiter
+		if bareDelimiter.valid() || Live(context.Background(), bareDelimiter) {
+			t.Fatalf("discovery accepted an endpoint with a bare %q delimiter", delimiter)
+		}
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	mode.Store("valid")
