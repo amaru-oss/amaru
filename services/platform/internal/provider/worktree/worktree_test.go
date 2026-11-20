@@ -822,7 +822,7 @@ func TestAgentInItsWorktreeCannotWriteOutsideIt(t *testing.T) {
 }
 
 func TestWorktreeOperationsRefuseMismatchedCheckout(t *testing.T) {
-	for _, scenario := range []string{"foreign repository", "foreign linked worktree", "different branch", "detached HEAD"} {
+	for _, scenario := range []string{"foreign repository", "foreign linked worktree", "different branch", "detached HEAD", "different base"} {
 		t.Run(scenario, func(t *testing.T) {
 			ctx := context.Background()
 			e := newPrepared(t)
@@ -841,12 +841,18 @@ func TestWorktreeOperationsRefuseMismatchedCheckout(t *testing.T) {
 				git(t, e.wt, "checkout", "-q", "-b", "other")
 			case "detached HEAD":
 				git(t, e.wt, "checkout", "-q", "--detach")
+			case "different base":
+				e.ws.Base = "another-base"
 			}
-			for name, run := range map[string]func() error{
-				"Prepare": func() error { _, err := e.r.Prepare(ctx, e.ws.Key, e.ws.Branch); return err },
-				"Sync":    func() error { _, err := e.r.Sync(ctx, e.ws, true); return err },
-				"Remove":  func() error { _, err := e.r.Remove(ctx, e.ws, true); return err },
-			} {
+			operations := map[string]func() error{
+				"Confinement": func() error { _, err := e.r.Confinement(ctx, e.ws); return err },
+				"Sync":        func() error { _, err := e.r.Sync(ctx, e.ws, true); return err },
+				"Remove":      func() error { _, err := e.r.Remove(ctx, e.ws, true); return err },
+			}
+			if scenario != "different base" {
+				operations["Prepare"] = func() error { _, err := e.r.Prepare(ctx, e.ws.Key, e.ws.Branch); return err }
+			}
+			for name, run := range operations {
 				if err := run(); !errors.Is(err, domain.ErrConflict) {
 					t.Errorf("%s result = %v, want ErrConflict", name, err)
 				}
