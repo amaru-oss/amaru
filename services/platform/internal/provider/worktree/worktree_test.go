@@ -893,3 +893,17 @@ func TestChangedRejectsTruncatedPathList(t *testing.T) {
 		t.Fatalf("Changed returned %d entries and error %v for oversized output", len(got), err)
 	}
 }
+
+func TestChangedIncludesBothEndpointsOfRename(t *testing.T) {
+	e := newPrepared(t)
+	git(t, e.wt, "mv", "shared.txt", "renamed.txt")
+	commitAll(t, e.wt, "rename a base file")
+	for _, setting := range []string{"true", "false"} {
+		git(t, e.wt, "config", "diff.renames", setting)
+		got, err := e.r.Changed(context.Background(), e.ws)
+		want := []string{"feature.txt", "renamed.txt", "shared.txt"}
+		if err != nil || !slices.Equal(got, want) {
+			t.Errorf("diff.renames=%s: Changed = %q, %v; want %q", setting, got, err, want)
+		}
+	}
+}
