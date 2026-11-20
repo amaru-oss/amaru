@@ -22,6 +22,8 @@ What can be checked locally today, and how to report it.
 
 No hosted CI is configured; local results are not CI results.
 
+Native Linux TCP6 discovery and launch-code exchange have a [bounded integration record](../validation/m3/2026-11-20-linux-iam-001-ipv6-live.md). The test uses an adapter server and an explicit session cookie.
+
 ## Evidence levels
 Use these words in reports and docs:
 - **Unit-tested**: automated tests with fakes cover the behavior.
