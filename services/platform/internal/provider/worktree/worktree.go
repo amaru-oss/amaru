@@ -409,15 +409,23 @@ func (r *Repo) Changed(ctx context.Context, ws domain.Workspace) ([]string, erro
 	if err != nil {
 		return nil, err
 	}
-	return paths(out), nil
+	return paths(out)
 }
 
 // paths reads Git's NUL-delimited, unquoted path output.
-func paths(s string) []string {
+func paths(s string) ([]string, error) {
 	if s == "" {
-		return nil
+		return nil, nil
 	}
-	return strings.Split(strings.TrimSuffix(s, "\x00"), "\x00")
+	s, complete := strings.CutSuffix(s, "\x00")
+	if !complete {
+		return nil, errors.New("git diff: incomplete path list")
+	}
+	entries := strings.Split(s, "\x00")
+	if slices.Contains(entries, "") {
+		return nil, errors.New("git diff: empty path entry")
+	}
+	return entries, nil
 }
 
 // Remove deletes a worktree and its local branch. It refuses, with ErrUnsafeRemove, a worktree
@@ -554,7 +562,11 @@ func (r *Repo) Sync(ctx context.Context, ws domain.Workspace, mergeBase bool) (d
 			if diffErr != nil {
 				return res, errors.Join(err, diffErr)
 			}
-			res.Conflicts = paths(out)
+			conflicts, parseErr := paths(out)
+			if parseErr != nil {
+				return res, errors.Join(err, parseErr)
+			}
+			res.Conflicts = conflicts
 			if len(res.Conflicts) == 0 {
 				return res, err
 			}

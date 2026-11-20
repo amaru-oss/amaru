@@ -943,13 +943,14 @@ func TestConfinementRequiresPreparedWorktree(t *testing.T) {
 	}
 }
 
-type statusOutputRunner struct {
+type gitOutputRunner struct {
 	ports.ProcessRunner
-	output string
+	command string
+	output  string
 }
 
-func (r statusOutputRunner) Start(ctx context.Context, spec ports.ProcSpec) (ports.Proc, error) {
-	if subcommand(spec.Args) == "status" {
+func (r gitOutputRunner) Start(ctx context.Context, spec ports.ProcSpec) (ports.Proc, error) {
+	if subcommand(spec.Args) == r.command {
 		return outputProc{output: strings.NewReader(r.output)}, nil
 	}
 	return r.ProcessRunner.Start(ctx, spec)
@@ -959,11 +960,44 @@ func TestHeadRejectsIncompleteStatusOutput(t *testing.T) {
 	for _, output := range []string{"??", "?? file", "??-file\x00", "R  move.txt\x00"} {
 		t.Run(fmt.Sprintf("%q", output), func(t *testing.T) {
 			e := newPrepared(t)
-			e.rec.inner = statusOutputRunner{ProcessRunner: e.rec.inner, output: output}
+			e.rec.inner = gitOutputRunner{ProcessRunner: e.rec.inner, command: "status", output: output}
 			got, err := e.r.Head(context.Background(), e.ws)
 			if err == nil || got != (domain.WorktreeHead{}) {
 				t.Fatalf("Head reported partial status: %+v, %v", got, err)
 			}
 		})
+	}
+}
+
+func TestChangedRejectsIncompletePathOutput(t *testing.T) {
+	for _, output := range []string{"first.txt\x00partial", "first.txt\x00\x00"} {
+		t.Run(fmt.Sprintf("%q", output), func(t *testing.T) {
+			e := newPrepared(t)
+			e.rec.inner = gitOutputRunner{ProcessRunner: e.rec.inner, command: "diff", output: output}
+			got, err := e.r.Changed(context.Background(), e.ws)
+			if err == nil || got != nil {
+				t.Fatalf("Changed reported partial paths: %q, %v", got, err)
+			}
+		})
+	}
+}
+
+func TestSyncAbortsMergeWithIncompleteConflictPaths(t *testing.T) {
+	e := newPrepared(t)
+	write(t, filepath.Join(e.wt, "shared.txt"), "one\nBRANCH\nthree\n")
+	sha := commitAll(t, e.wt, "WI-001: edit shared")
+	git(t, e.wt, "push", "-q", "origin", branch)
+	e.moveBase("shared.txt", "one\nBASE\nthree\n")
+	e.rec.inner = gitOutputRunner{ProcessRunner: e.rec.inner, command: "diff", output: "shared.txt"}
+
+	got, err := e.r.Sync(context.Background(), e.ws, true)
+	if err == nil || len(got.Conflicts) != 0 || got.Merged || got.Pushed {
+		t.Fatalf("Sync = %+v, %v", got, err)
+	}
+	if head := git(t, e.wt, "rev-parse", "HEAD"); head != sha {
+		t.Fatalf("local head = %s, want %s", head, sha)
+	}
+	if status := git(t, e.wt, "status", "--porcelain"); status != "" {
+		t.Fatalf("worktree left dirty: %q", status)
 	}
 }
