@@ -124,6 +124,23 @@ func TestProjectArtifactAccess(t *testing.T) {
 		}
 	})
 
+	t.Run("ambiguous version never opens a blob", func(t *testing.T) {
+		collision := foreign
+		collision.Version = first.Version
+		index := artifactIndexProbe{read: func(context.Context, string) ([]domain.ArtifactVersion, error) {
+			return []domain.ArtifactVersion{first, collision}, nil
+		}}
+		blobs := artifactBlobProbe{open: func(context.Context, string) (io.ReadCloser, error) {
+			t.Fatal("opened content for an ambiguous version")
+			return nil, nil
+		}}
+		if got, err := api.ArtifactVersions(ctx, a, "report", index); err != domain.ErrNotFound || got != nil {
+			t.Fatalf("versions: %+v %v", got, err)
+		}
+		if r, err := api.ArtifactContent(ctx, a, "report", first.Version, index, blobs); err != domain.ErrNotFound || r != nil {
+			t.Fatalf("content: %v %v", r, err)
+		}
+	})
 	t.Run("authorization precedes index IO", func(t *testing.T) {
 		unread := artifactIndexProbe{read: func(context.Context, string) ([]domain.ArtifactVersion, error) {
 			t.Fatal("unauthorized index read")

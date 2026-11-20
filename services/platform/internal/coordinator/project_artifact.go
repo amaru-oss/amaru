@@ -24,10 +24,12 @@ func (a *ProjectAccess) ArtifactVersions(ctx context.Context, project domain.Pro
 		return nil, err
 	}
 	var owned []domain.ArtifactVersion
+	seen := make(map[int64]bool, len(versions))
 	for _, v := range versions {
-		if v.ArtifactID != id {
+		if v.ArtifactID != id || v.Version < 1 || seen[v.Version] {
 			return nil, domain.ErrNotFound
 		}
+		seen[v.Version] = true
 		if _, _, err := a.execution(ctx, project, v.ExecutionID); errors.Is(err, domain.ErrNotFound) {
 			continue
 		} else if err != nil {
