@@ -48,5 +48,9 @@ Reusable procedures live in `.agents/skills/<name>/SKILL.md` (canonical; `.claud
 - `repository-bootstrap` — add or restructure top-level areas and tooling safely.
 - `documentation-maintenance` — keep docs consistent with implementation and decisions.
 
+## Agent coordination
+- At session start, check whether you are running inside tmux. If so, look for an available agent in another pane of the same session. Use a lightweight agent such as Luna for small, clearly scoped tasks when available. The primary agent owns architecture, implementation, integration and final verification.
+- Confirm the delegate is idle. Before each new task, send `/clear` followed by `Enter` and wait for a fresh prompt. Send the task text, then send the `Enter` key as a separate tmux action. Inspect the pane to confirm the task was submitted and the delegate started. If the task text is still in the input box, send `Enter` again. Keep two-way communication in tmux for progress, questions and findings. Coordinate file ownership before delegating edits. Use a shared `.orchestration/` directory or a watcher only if direct coordination proves insufficient.
+
 ## Reporting
 Reports state: what changed (files), what was run (commands + outcomes), what was not validated and why, and what needs a human decision. Separate facts from recommendations.
