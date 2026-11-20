@@ -579,6 +579,7 @@ func TestHTTPBoundedShutdownCancelsAndPreservesPublicationUntilJoin(t *testing.T
 	}
 	close(release)
 	wait(t, exited)
+	wait(t, h.drained) // The request middleware emits its diagnostic before the active request drains.
 	wait(t, h.stopped)
 	// Production must exit after timeout. The test releases abandoned resources
 	// only after the uncooperative handler has ended, without restarting an owner.
