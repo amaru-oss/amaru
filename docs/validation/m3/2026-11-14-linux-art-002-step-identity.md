@@ -115,3 +115,7 @@ runtime, native macOS/Windows, real Provider, public Evidence API, missing
 check/diff/log/workspace recorder or full #124/#19 audit chain is validated by
 this slice. No acceptance checkboxes, issue closures, Project status changes or
 merges are part of this work. Linux-first M3 policy remains in force.
+
+## Step ownership before secondary reads
+
+`TestBundleRejectsMismatchedStoreIdentity` supplies a foreign Step from the initial Execution lookup. The reader returns no Evidence and performs no secondary reads. The domain builder still checks each Step when called directly.
