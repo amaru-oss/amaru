@@ -77,7 +77,15 @@ func (a *ProjectAccess) execution(ctx context.Context, project domain.ProjectKey
 	if errors.Is(err, domain.ErrNotFound) || (err == nil && (e.ID != id || e.ProjectID != string(project))) {
 		return domain.Execution{}, nil, domain.ErrNotFound
 	}
-	return e, steps, err
+	if err != nil {
+		return domain.Execution{}, nil, err
+	}
+	for _, step := range steps {
+		if step.ExecutionID != id {
+			return domain.Execution{}, nil, domain.ErrNotFound
+		}
+	}
+	return e, steps, nil
 }
 
 // Execution refuses missing and foreign IDs identically, before returning child records.
