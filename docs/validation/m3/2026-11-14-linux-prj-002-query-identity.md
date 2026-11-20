@@ -175,3 +175,7 @@ The Project access boundary returns an empty page and ErrNotFound if the Event
 journal returns a record from a different Project or outside the requested
 Execution filter. The fake-backed test reproduces both mismatches and verifies
 that the response withholds the entire page, including its cursor.
+
+## Follow-up
+
+The Project Execution read now rejects a store response containing a Step from a different Execution, even if the parent Execution matches. A fake store test verifies that the read returns no Execution or Steps.

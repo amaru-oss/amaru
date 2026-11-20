@@ -17,14 +17,18 @@ import (
 
 type readAuthorityStore struct {
 	ports.ExecutionStore
-	after   func()
-	failure error
-	project domain.ProjectKey
+	after         func()
+	failure       error
+	project       domain.ProjectKey
+	stepExecution string
 }
 
 func (s readAuthorityStore) Get(context.Context, string) (domain.Execution, []domain.StepExecution, error) {
 	s.after()
-	return domain.Execution{ID: "execution", ProjectID: string(s.project)}, []domain.StepExecution{{ID: "step", ExecutionID: "execution"}}, s.failure
+	if s.stepExecution == "" {
+		s.stepExecution = "execution"
+	}
+	return domain.Execution{ID: "execution", ProjectID: string(s.project)}, []domain.StepExecution{{ID: "step", ExecutionID: s.stepExecution}}, s.failure
 }
 func (s readAuthorityStore) Approval(context.Context, string) (domain.Approval, error) {
 	s.after()
@@ -80,8 +84,11 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 	owner := domain.Principal{Kind: domain.PrincipalHuman, ID: "owner", Role: domain.RoleOwner}
 	failed := errors.New("storage unavailable")
 	for _, operation := range []string{"project lookup", "execution", "approval", "events", "evidence", "settings", "artifact versions", "artifact content", "event ownership", "evidence ownership", "artifact ownership"} {
-		for _, outcome := range []string{"authorized", "revoked", "canceled", "identity changed", "storage error", "storage error with identity changed", "different record", "foreign bundle", "foreign event project", "foreign event execution"} {
+		for _, outcome := range []string{"authorized", "revoked", "canceled", "identity changed", "storage error", "storage error with identity changed", "different record", "foreign bundle", "foreign step", "foreign event project", "foreign event execution"} {
 			if outcome == "different record" && operation != "execution" && operation != "approval" && operation != "evidence" {
+				continue
+			}
+			if outcome == "foreign step" && operation != "execution" {
 				continue
 			}
 			if outcome == "foreign bundle" && operation != "evidence" {
@@ -118,6 +125,9 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 					t.Fatal(err)
 				}
 				store := readAuthorityStore{after: func() {}, project: project}
+				if outcome == "foreign step" {
+					store.stepExecution = "other-execution"
+				}
 				var projectStore ports.ProjectStore = projects
 				if operation == "project lookup" {
 					projectStore = readAuthorityProjects{projects, after}
@@ -211,7 +221,7 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 					return
 				}
 				want := failed
-				if outcome == "different record" || outcome == "foreign bundle" || strings.HasPrefix(outcome, "foreign event") {
+				if outcome == "different record" || outcome == "foreign bundle" || outcome == "foreign step" || strings.HasPrefix(outcome, "foreign event") {
 					want = domain.ErrNotFound
 				}
 				if outcome == "revoked" || outcome == "identity changed" {
