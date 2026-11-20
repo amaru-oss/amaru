@@ -115,7 +115,7 @@ func TestUsageEvidenceCurrentAttemptCoverage(t *testing.T) {
 	}
 }
 
-func TestUsageEvidenceAttemptCoverageStaysWithinStep(t *testing.T) {
+func TestUsageEvidenceRejectsAmbiguousAttemptOwnership(t *testing.T) {
 	at := time.Date(2026, 11, 14, 0, 0, 0, 0, time.UTC)
 	in := ExecutionEvidenceInput{
 		Execution: Execution{ID: "e"},
@@ -125,13 +125,12 @@ func TestUsageEvidenceAttemptCoverageStaysWithinStep(t *testing.T) {
 			{ExecutionID: "e", StepID: "s2", AttemptID: "current", CapturedAt: at, Reports: []UsageReport{{}}},
 		},
 	}
-	b, err := BuildExecutionEvidence(in)
-	if err != nil {
-		t.Fatal(err)
+	if _, err := BuildExecutionEvidence(in); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("wrong Step receipt: got %v, want ErrInvalid", err)
 	}
-	for _, st := range b.Steps {
-		if st.UsageGap == "" {
-			t.Fatalf("Step %s covered by another Step's attempt", st.ID)
-		}
+	in.Usage = in.Usage[:1]
+	in.Steps[1].AttemptID = "current"
+	if _, err := BuildExecutionEvidence(in); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("duplicate current attempt: got %v, want ErrInvalid", err)
 	}
 }
