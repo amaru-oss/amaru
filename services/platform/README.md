@@ -95,7 +95,7 @@ cd services/platform
 go test -tags browser -count=1 -run TestFirefoxLaunchSessionAndLogout -v ./internal/adapter/localauth
 ```
 
-See [Linux IAM-001 evidence](../../docs/validation/m3/2026-11-12-linux-iam-001.md) and [provenance](PROVENANCE.md). #92 stays open for delivery acceptance; the [HTTP lifecycle slice](../../docs/validation/m3/2026-11-14-linux-iam-001-http-lifecycle.md) supplies the resource owner with an explicit state directory, while #18 still owns canonical state-directory selection, production startup wiring, `amaru open` integration and composed API/WebSocket acceptance, and #170 owns structured log redaction.
+See [Linux IAM-001 evidence](../../docs/validation/m3/2026-11-12-linux-iam-001.md) and [provenance](PROVENANCE.md). #92 stays open for delivery acceptance; the [HTTP lifecycle slice](../../docs/validation/m3/2026-11-14-linux-iam-001-http-lifecycle.md) supplies the resource owner with an explicit state directory, while #18 still owns production startup wiring, `amaru open` integration and composed API/WebSocket acceptance, and #170 owns structured log redaction.
 
 ## Operational JSON logging (#170)
 

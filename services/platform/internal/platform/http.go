@@ -18,7 +18,8 @@ import (
 )
 
 // HTTPConfig supplies deployment values and concrete authorized product handlers.
-// StateDir is explicit: canonical per-user path selection belongs to bootstrap.
+// An empty StateDir selects the per-user discovery location. Explicit paths
+// are supplied by internal callers such as tests.
 type HTTPConfig struct {
 	StateDir, Version, InstanceID string
 	Lifecycle                     *Lifecycle
@@ -49,7 +50,7 @@ type HTTP struct {
 }
 
 func NewHTTP(config HTTPConfig) (*HTTP, error) {
-	if config.StateDir == "" || strings.TrimSpace(config.Version) == "" || config.InstanceID == "" || config.Lifecycle == nil || config.Logger == nil || config.OnLogError == nil || config.Handler == nil {
+	if strings.TrimSpace(config.Version) == "" || config.InstanceID == "" || config.Lifecycle == nil || config.Logger == nil || config.OnLogError == nil || config.Handler == nil {
 		return nil, errors.New("HTTP requires deployment values, lifecycle, diagnostics and product handlers")
 	}
 	return &HTTP{config: config, ready: make(chan struct{}), started: make(chan struct{}), served: make(chan struct{}), drained: make(chan struct{}), stopped: make(chan struct{}), hijacked: map[net.Conn]bool{}, initErr: errors.New("HTTP initialization did not complete")}, nil
@@ -170,7 +171,15 @@ func (h *HTTP) Start(ctx context.Context) error {
 		h.initErr = err
 		return err
 	}
-	h.publication, err = discovery.Publish(h.config.StateDir, listener, h.auth.AdministratorSecret(), h.config.Version, started)
+	dir := h.config.StateDir
+	if dir == "" {
+		dir, err = discovery.PrepareStateDirectory()
+		if err != nil {
+			h.initErr = err
+			return err
+		}
+	}
+	h.publication, err = discovery.Publish(dir, listener, h.auth.AdministratorSecret(), h.config.Version, started)
 	if err != nil {
 		h.initErr = err
 		return err
