@@ -91,6 +91,40 @@ func httpCall(t *testing.T, info discovery.Info, method, path, body string, conf
 	return resp
 }
 
+func TestHTTPPublishesToDefaultStateDirectory(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "new-state")
+	t.Setenv("XDG_STATE_HOME", base)
+	l, _ := NewLifecycle(time.Now().Add(3*time.Second), time.Second, nil)
+	h, _ := httpOwner(t, "", l, func(*localauth.Auth) (http.Handler, error) {
+		return http.NotFoundHandler(), nil
+	})
+	cancel, done := startHTTP(t, h)
+	ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stop()
+	if err := h.WaitReady(ctx); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := discovery.StateDirectory()
+	if err != nil || dir != filepath.Join(base, "amaru") {
+		t.Fatalf("resolved directory = %q, %v", dir, err)
+	}
+	if _, err := discovery.Read(dir); err != nil {
+		t.Fatal("private discovery unavailable")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-ctx.Done():
+		t.Fatal("HTTP did not stop")
+	}
+	if _, err := os.Stat(filepath.Join(dir, discovery.FileName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("discovery record survived shutdown")
+	}
+}
+
 func TestHTTPDiscoveryAdmissionAndProductAuthentication(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "state")
 	queue := make(chan operational.Record, 128)
