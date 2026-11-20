@@ -200,6 +200,11 @@ func BuildExecutionEvidence(in ExecutionEvidenceInput) (ExecutionEvidence, error
 	if missingContext {
 		out.Gaps = append(out.Gaps, EvidenceGap{GapContext, "one or more Steps have no recorded context; see contextGap"})
 	}
+	type artifactKey struct {
+		id      string
+		version int64
+	}
+	artifacts := make(map[artifactKey]bool, len(in.Artifacts))
 	for _, v := range in.Artifacts {
 		i, ok := steps[v.StepID]
 		if !ok || v.ExecutionID != id {
@@ -211,6 +216,11 @@ func BuildExecutionEvidence(in ExecutionEvidenceInput) (ExecutionEvidence, error
 		if err := v.Validate(); err != nil {
 			return ExecutionEvidence{}, fmt.Errorf("evidence: recorded artifact: %w", err)
 		}
+		key := artifactKey{v.ArtifactID, v.Version}
+		if artifacts[key] {
+			return ExecutionEvidence{}, invalid("evidence: duplicate artifact %s v%d", v.ArtifactID, v.Version)
+		}
+		artifacts[key] = true
 		out.Steps[i].Artifacts = append(out.Steps[i].Artifacts, v)
 	}
 	for i := range out.Steps {
