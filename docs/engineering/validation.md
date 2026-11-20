@@ -145,7 +145,7 @@ Execution lifecycle owners are covered by `go test -race -count=1 ./internal/pla
 
 Operational sink panic containment has [Linux evidence](../validation/m3/2026-11-13-linux-log-sink-panic.md): repeated safe errors and loopback HTTP success/rejection/panic without raw server diagnostics. This covers the writer boundary, not complete product channel capture or recovery of partial log records.
 
-HTTP response I/O failure diagnostics have [Linux evidence](../validation/m3/2026-11-14-linux-obs-001-response-io.md): injected write, short-write, flush and hijack failures retain their handler results and emit a static safe failure cause. Selected HTTP status does not prove delivery; buffered failures after handler return and direct hijacked-connection I/O remain outside this capture.
+HTTP response I/O failure diagnostics have [Linux evidence](../validation/m3/2026-11-14-linux-obs-001-response-io.md): injected write, short-write, flush and hijack failures retain their handler results and emit a static safe failure cause. Selected HTTP status does not prove delivery; buffered failures after handler return and direct hijacked-connection I/O remain outside this capture. The HTTP middleware records a deliberate `http.ErrAbortHandler` as `failed` with the fixed `response_aborted` cause. Unexpected handler panics still use the `panicked` outcome.
 
 HTTP status after a recovered invalid-header panic has [Linux integration evidence](../validation/m3/2026-11-14-linux-obs-001-header-recovery.md): explicit headers, body writes and flushes retain matching wire/JSON status, correlation and secret omission. This covers handler recovery at the wrapper boundary; it does not prove network delivery or complete OBS-001 acceptance.
 
