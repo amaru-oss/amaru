@@ -35,3 +35,10 @@ API remain unvalidated by this test.
 - Reviewed test, from `services/platform`:
   `GOCACHE=/tmp/amaru-after423-go-cache go test -race -v -count=10 -run '^TestIPv6LiveDiscoveryAndNativeAuth$' ./internal/adapter/discovery`
   passed all ten runs without a skip.
+
+## Session revocation over TCP6
+
+The same integration test exercises logout over the socket. A DELETE with the
+matching Origin and no CSRF token returns 403 and the session stays usable.
+With the session's CSRF token, DELETE returns 204 and reusing the old cookie
+returns 401.

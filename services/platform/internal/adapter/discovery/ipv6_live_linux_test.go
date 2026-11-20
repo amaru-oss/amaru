@@ -112,12 +112,43 @@ func TestIPv6LiveDiscoveryAndNativeAuth(t *testing.T) {
 	if err != nil {
 		t.Fatal("cookie session request failed")
 	}
-	defer resp.Body.Close()
 	var session struct {
 		CSRFToken string `json:"csrfToken"`
 	}
-	if resp.StatusCode != http.StatusOK || json.NewDecoder(resp.Body).Decode(&session) != nil || session.CSRFToken == "" {
+	decodeErr = json.NewDecoder(resp.Body).Decode(&session)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || decodeErr != nil || session.CSRFToken == "" {
 		t.Fatal("cookie session exchange failed")
+	}
+
+	for _, tc := range []struct {
+		method, csrf string
+		want         int
+	}{
+		{http.MethodDelete, "", http.StatusForbidden},
+		{http.MethodGet, "", http.StatusOK},
+		{http.MethodDelete, session.CSRFToken, http.StatusNoContent},
+		{http.MethodGet, "", http.StatusUnauthorized},
+	} {
+		req, err := http.NewRequest(tc.method, endpoint+"/v1/auth/session", nil)
+		if err != nil {
+			t.Fatal("could not construct session lifecycle request")
+		}
+		req.AddCookie(cookie)
+		if tc.method == http.MethodDelete {
+			req.Header.Set("Origin", endpoint)
+		}
+		if tc.csrf != "" {
+			req.Header.Set("X-Amaru-CSRF", tc.csrf)
+		}
+		res, err := client.Do(req)
+		if err != nil {
+			t.Fatal("IPv6 session lifecycle request failed")
+		}
+		res.Body.Close()
+		if res.StatusCode != tc.want {
+			t.Fatalf("%s session returned %d, want %d", tc.method, res.StatusCode, tc.want)
+		}
 	}
 }
 
