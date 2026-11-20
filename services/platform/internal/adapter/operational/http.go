@@ -99,8 +99,10 @@ func (w *response) Write(p []byte) (int, error) {
 func (w *response) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	conn, rw, err := http.NewResponseController(w.ResponseWriter).Hijack()
 	if err == nil {
-		w.status = http.StatusSwitchingProtocols
-		w.wrote = true
+		if !w.wrote {
+			w.status = http.StatusSwitchingProtocols
+			w.wrote = true
+		}
 	} else {
 		w.ioFailed = true
 	}
