@@ -387,21 +387,19 @@ func (r *Repo) Changed(ctx context.Context, ws domain.Workspace) ([]string, erro
 	if err != nil {
 		return nil, err
 	}
-	out, err := r.git(ctx, dir, "diff", "--name-only", remote+"/"+r.base+"...HEAD")
+	out, err := r.git(ctx, dir, "diff", "--name-only", "-z", remote+"/"+r.base+"...HEAD")
 	if err != nil {
 		return nil, err
 	}
-	return lines(out), nil
+	return paths(out), nil
 }
 
-func lines(s string) []string {
-	var out []string
-	for _, l := range strings.Split(s, "\n") {
-		if l = strings.TrimSpace(l); l != "" {
-			out = append(out, l)
-		}
+// paths reads Git's NUL-delimited, unquoted path output.
+func paths(s string) []string {
+	if s == "" {
+		return nil
 	}
-	return out
+	return strings.Split(strings.TrimSuffix(s, "\x00"), "\x00")
 }
 
 // Remove deletes a worktree and its local branch. It refuses, with ErrUnsafeRemove, a worktree
@@ -531,11 +529,11 @@ func (r *Repo) Sync(ctx context.Context, ws domain.Workspace, mergeBase bool) (d
 		msg := fmt.Sprintf("Merge %s into %s\n\nBase refresh (base %s).", r.base, ws.Branch, res.Base)
 		if _, err := r.git(ctx, dir, "-c", "user.name="+r.identity.Name, "-c", "user.email="+r.identity.Email,
 			"merge", "--no-ff", "--no-verify", "--no-edit", "-q", "-m", msg, res.Base); err != nil {
-			out, _ := r.git(ctx, dir, "diff", "--name-only", "--diff-filter=U")
+			out, _ := r.git(ctx, dir, "diff", "--name-only", "-z", "--diff-filter=U")
 			if _, aerr := r.git(ctx, dir, "merge", "--abort"); aerr != nil {
 				return res, fmt.Errorf("%w; abort: %v", err, aerr)
 			}
-			res.Conflicts = lines(out)
+			res.Conflicts = paths(out)
 			if len(res.Conflicts) == 0 {
 				return res, err
 			}

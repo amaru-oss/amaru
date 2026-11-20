@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -840,5 +841,26 @@ func TestWorktreeOperationsRefuseMismatchedCheckout(t *testing.T) {
 				t.Fatalf("checkout HEAD = %s, want %s", got, e.implSHA)
 			}
 		})
+	}
+}
+
+func TestChangedPreservesGitPaths(t *testing.T) {
+	e := newPrepared(t)
+	names := []string{" leading-and-trailing ", "unicode-é.txt"}
+	if runtime.GOOS == "windows" {
+		names[0] = " leading-space.txt"
+	}
+	for _, name := range names {
+		write(t, filepath.Join(e.wt, name), "changed\n")
+	}
+	commitAll(t, e.wt, "unusual filenames")
+	got, err := e.r.Changed(context.Background(), e.ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range names {
+		if !slices.Contains(got, name) {
+			t.Errorf("missing exact path %q in %q", name, got)
+		}
 	}
 }
