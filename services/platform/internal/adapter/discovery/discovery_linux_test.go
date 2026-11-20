@@ -283,3 +283,17 @@ func TestPublishRejectsOversizedRecord(t *testing.T) {
 		t.Fatal("oversized record created discovery state")
 	}
 }
+
+func TestPublishRejectsInvalidUTF8Version(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "state")
+	p, err := Publish(dir, listener(t), fixtureSecret, "test\xff", time.Now())
+	if p != nil {
+		defer p.Close()
+	}
+	if !errors.Is(err, errUnsafe) || p != nil {
+		t.Fatal("accepted a version that changes when encoded as JSON")
+	}
+	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("invalid version created discovery state")
+	}
+}
