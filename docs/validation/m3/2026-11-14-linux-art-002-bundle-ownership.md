@@ -125,3 +125,11 @@ availability, remaining checks/diff/log/workspace producers and the complete
 audit chain stay open. Multi-output metadata writes remain non-atomic, and
 rejected Artifact ingest can leave unreferenced blobs. #124/#19/#20 remain open.
 Real Providers, RustFS, native macOS/Windows and complete M3 exit are not validated.
+
+## Execution Event sequence completeness
+
+The per-Execution store returns the full log, whose sequence starts at 1 and
+has no gaps. Evidence assembly refuses a missing first or intermediate
+sequence with ErrInvalid and returns no bundle. Both missing-entry cases
+returned a digest before the change. Approval audit sequence rules are
+independent because those entries are selected from the Instance audit log.

@@ -101,7 +101,7 @@ type ExecutionEvidenceInput struct {
 // BuildExecutionEvidence assembles the bundle. It returns ErrInvalid when a part belongs to
 // another Execution or Step, Step/context identities are ambiguous, or a pinned definition or
 // recorded context is damaged. Steps keep their creation order, Approvals their request order and
-// Events their strictly increasing Seq order; Artifacts are grouped under their Step. The returned bundle owns its
+// Events their contiguous Seq order starting at 1; Artifacts are grouped under their Step. The returned bundle owns its
 // contents; later input edits cannot invalidate its Digest.
 func BuildExecutionEvidence(in ExecutionEvidenceInput) (ExecutionEvidence, error) {
 	id := in.Execution.ID
@@ -263,12 +263,10 @@ func BuildExecutionEvidence(in ExecutionEvidenceInput) (ExecutionEvidence, error
 			return ExecutionEvidence{}, invalid("evidence: audit entry %d (%s %s) is not about an approval of execution %s", ev.Seq, ev.TargetType, ev.TargetID, id)
 		}
 	}
-	var lastEventSeq int64
-	for _, ev := range in.Events {
-		if ev.Seq <= lastEventSeq {
-			return ExecutionEvidence{}, invalid("evidence: event sequence %d does not advance past %d", ev.Seq, lastEventSeq)
+	for i, ev := range in.Events {
+		if want := int64(i) + 1; ev.Seq != want {
+			return ExecutionEvidence{}, invalid("evidence: event sequence %d, expected %d", ev.Seq, want)
 		}
-		lastEventSeq = ev.Seq
 		if ev.ExecutionID != id {
 			return ExecutionEvidence{}, invalid("evidence: event %d belongs to execution %s, not %s", ev.Seq, ev.ExecutionID, id)
 		}

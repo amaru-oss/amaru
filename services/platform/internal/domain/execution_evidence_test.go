@@ -415,9 +415,11 @@ func TestBuildExecutionEvidenceRejectsInvalidArtifact(t *testing.T) {
 
 func TestBuildExecutionEvidenceRejectsInvalidEventSequence(t *testing.T) {
 	for name, sequences := range map[string][]int64{
-		"non-positive": {0},
-		"duplicate":    {1, 1},
-		"reversed":     {2, 1},
+		"non-positive":   {0},
+		"duplicate":      {1, 1},
+		"reversed":       {1, 3, 2},
+		"missing first":  {2},
+		"missing middle": {1, 3},
 	} {
 		t.Run(name, func(t *testing.T) {
 			in := evidenceInput(t)
