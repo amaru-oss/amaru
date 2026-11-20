@@ -445,3 +445,21 @@ func TestBuildExecutionEvidenceRejectsDuplicateArtifactVersion(t *testing.T) {
 		t.Fatalf("ambiguous Artifact version returned Evidence: %v", err)
 	}
 }
+
+func TestBuildExecutionEvidenceRejectsAmbiguousApprovals(t *testing.T) {
+	for _, name := range []string{"missing ID", "duplicate ID"} {
+		t.Run(name, func(t *testing.T) {
+			in := evidenceInput(t)
+			if name == "missing ID" {
+				in.Approvals[0].ID = ""
+				in.Audit = nil
+			} else {
+				in.Approvals = append(in.Approvals, in.Approvals[0])
+			}
+			got, err := BuildExecutionEvidence(in)
+			if !errors.Is(err, ErrInvalid) || !reflect.DeepEqual(got, ExecutionEvidence{}) {
+				t.Fatalf("ambiguous Approval returned Evidence: %v", err)
+			}
+		})
+	}
+}
