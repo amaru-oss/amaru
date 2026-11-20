@@ -41,13 +41,14 @@ func (l *Logger) HTTP(instanceID string, next http.Handler, onError func(error))
 		}()
 		next.ServeHTTP(rw, r.WithContext(ctx))
 		outcome = "succeeded"
-		if rw.status >= 400 {
-			outcome = "rejected"
-		} else if ctx.Err() != nil {
+		if ctx.Err() != nil {
 			outcome, cause = "canceled", "request_canceled"
 			if ctx.Err() == context.DeadlineExceeded {
 				cause = "request_deadline_exceeded"
 			}
+		}
+		if rw.status >= 400 {
+			outcome = "rejected"
 		}
 		if rw.ioFailed {
 			outcome = "failed"
