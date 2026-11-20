@@ -256,6 +256,11 @@ func (a *ProjectAccess) Events(ctx context.Context, q domain.EventQuery, stream 
 	if current.ID != by.ID {
 		return domain.EventPage{}, domain.ErrNotPermitted
 	}
+	for _, event := range page.Events {
+		if event.ProjectID != q.ProjectID || (q.ExecutionID != "" && event.Event.ExecutionID != q.ExecutionID) {
+			return domain.EventPage{}, domain.ErrNotFound
+		}
+	}
 	return page, nil
 }
 

@@ -168,3 +168,10 @@ authorization check after the read still runs before the response.
 - From the repository root, `make check` passed (exit 0).
 
 The mismatch cases are unit-tested with a fake Evidence reader.
+
+## Event page scope
+
+The Project access boundary returns an empty page and ErrNotFound if the Event
+journal returns a record from a different Project or outside the requested
+Execution filter. The fake-backed test reproduces both mismatches and verifies
+that the response withholds the entire page, including its cursor.

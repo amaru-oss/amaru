@@ -43,13 +43,14 @@ func (s readAuthorityProjects) Get(ctx context.Context, key domain.ProjectKey) (
 }
 
 type readAuthorityStream struct {
+	page    domain.EventPage
 	after   func()
 	failure error
 }
 
 func (s readAuthorityStream) ReadEvents(context.Context, domain.EventQuery, time.Time, time.Duration) (domain.EventPage, error) {
 	s.after()
-	return domain.EventPage{Cursor: 42}, s.failure
+	return s.page, s.failure
 }
 
 type readAuthorityEvidence struct {
@@ -79,11 +80,14 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 	owner := domain.Principal{Kind: domain.PrincipalHuman, ID: "owner", Role: domain.RoleOwner}
 	failed := errors.New("storage unavailable")
 	for _, operation := range []string{"project lookup", "execution", "approval", "events", "evidence", "settings", "artifact versions", "artifact content", "event ownership", "evidence ownership", "artifact ownership"} {
-		for _, outcome := range []string{"authorized", "revoked", "canceled", "identity changed", "storage error", "storage error with identity changed", "different record", "foreign bundle"} {
+		for _, outcome := range []string{"authorized", "revoked", "canceled", "identity changed", "storage error", "storage error with identity changed", "different record", "foreign bundle", "foreign event project", "foreign event execution"} {
 			if outcome == "different record" && operation != "execution" && operation != "approval" && operation != "evidence" {
 				continue
 			}
 			if outcome == "foreign bundle" && operation != "evidence" {
+				continue
+			}
+			if strings.HasPrefix(outcome, "foreign event") && operation != "events" {
 				continue
 			}
 			if operation == "project lookup" && strings.HasPrefix(outcome, "storage error") {
@@ -161,7 +165,7 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 					got, err = api.Approval(ctx, project, approvalID)
 					zero = domain.Approval{}
 				case "event ownership":
-					got, err = api.Events(ctx, domain.EventQuery{ProjectID: string(project), ExecutionID: "execution", Limit: 10}, readAuthorityStream{func() {}, nil}, time.Hour)
+					got, err = api.Events(ctx, domain.EventQuery{ProjectID: string(project), ExecutionID: "execution", Limit: 10}, readAuthorityStream{page: domain.EventPage{Cursor: 42}, after: func() {}}, time.Hour)
 					zero = domain.EventPage{}
 				case "artifact versions", "artifact ownership":
 					got, err = api.ArtifactVersions(ctx, project, "report", index)
@@ -178,7 +182,16 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 						t.Fatal("denied content left reader open")
 					}
 				case "events":
-					got, err = api.Events(ctx, domain.EventQuery{ProjectID: string(project), Limit: 10}, readAuthorityStream{after, failure}, time.Hour)
+					q := domain.EventQuery{ProjectID: string(project), ExecutionID: "execution", Limit: 10}
+					event := domain.StreamEvent{ProjectID: string(project), Event: domain.ExecutionEvent{ExecutionID: "execution"}}
+					if outcome == "foreign event project" {
+						event.ProjectID = "foreign-project"
+					}
+					if outcome == "foreign event execution" {
+						event.Event.ExecutionID = "foreign-execution"
+					}
+					page := domain.EventPage{Events: []domain.StreamEvent{event}, Cursor: 42}
+					got, err = api.Events(ctx, q, readAuthorityStream{page: page, after: after, failure: failure}, time.Hour)
 					zero = domain.EventPage{}
 				case "evidence", "evidence ownership":
 					execution := domain.Execution{ID: executionID, ProjectID: string(project)}
@@ -198,7 +211,7 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 					return
 				}
 				want := failed
-				if outcome == "different record" || outcome == "foreign bundle" {
+				if outcome == "different record" || outcome == "foreign bundle" || strings.HasPrefix(outcome, "foreign event") {
 					want = domain.ErrNotFound
 				}
 				if outcome == "revoked" || outcome == "identity changed" {
