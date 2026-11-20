@@ -151,7 +151,7 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 						after()
 						indexFailure = failure
 					}
-					return []domain.ArtifactVersion{{ArtifactID: "report", ExecutionID: "execution", Version: 1, Hash: "hash"}}, indexFailure
+					return []domain.ArtifactVersion{{ArtifactID: "report", ExecutionID: "execution", Version: 1, Hash: domain.ContentHash([]byte("content"))}}, indexFailure
 				}}
 				blobs := artifactBlobProbe{open: func(context.Context, string) (io.ReadCloser, error) {
 					after()

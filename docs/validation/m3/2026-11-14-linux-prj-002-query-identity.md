@@ -183,3 +183,6 @@ The Project Execution read now rejects a store response containing a Step from a
 ## Artifact version identity
 
 The Project artifact query refuses duplicate or non-positive version numbers in the index response. The coordinator test uses the same version number on two Projects and asserts metadata is withheld and no content blob is opened.
+
+`TestProjectArtifactAccess` also checks that a malformed digest on an owned
+Artifact version returns no metadata and does not attempt to open a blob.
