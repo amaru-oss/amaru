@@ -123,3 +123,7 @@ merges are part of this work. Linux-first M3 policy remains in force.
 `TestBundleRejectsForeignApprovalBeforeAuditRead` verifies that Approval rows
 for another Project or Execution, or an unknown Step, fail the Evidence read
 before the reader queries the audit log.
+
+The reader also rejects empty or duplicate Approval IDs before querying the
+audit log. A fake-backed regression checks both cases and requires zero audit
+reads and an empty bundle.

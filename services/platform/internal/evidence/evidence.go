@@ -99,6 +99,9 @@ func (r Reader) approvalAudit(ctx context.Context, approvals []domain.Approval) 
 	}
 	want := make(map[string]bool, len(approvals))
 	for _, a := range approvals {
+		if a.ID == "" || want[a.ID] {
+			return nil, fmt.Errorf("%w: evidence store returned an empty or duplicate approval ID", domain.ErrInvalid)
+		}
 		want[a.ID] = true
 	}
 	var out []domain.AuditEvent
