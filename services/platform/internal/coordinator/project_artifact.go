@@ -35,7 +35,7 @@ func (a *ProjectAccess) ArtifactVersions(ctx context.Context, project domain.Pro
 		} else if err != nil {
 			return nil, err
 		}
-		if !domain.ValidContentHash(v.Hash) {
+		if err := v.Validate(); err != nil {
 			return nil, domain.ErrNotFound
 		}
 		owned = append(owned, v)
