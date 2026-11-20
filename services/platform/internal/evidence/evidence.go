@@ -48,10 +48,12 @@ func (r Reader) Bundle(ctx context.Context, executionID string) (domain.Executio
 	if e.ID != executionID {
 		return domain.ExecutionEvidence{}, fmt.Errorf("%w: evidence store returned a different execution", domain.ErrInvalid)
 	}
+	stepIDs := make(map[string]bool, len(steps))
 	for _, step := range steps {
 		if step.ExecutionID != executionID {
 			return domain.ExecutionEvidence{}, fmt.Errorf("%w: evidence store returned a step for a different execution", domain.ErrInvalid)
 		}
+		stepIDs[step.ID] = true
 	}
 	in := domain.ExecutionEvidenceInput{Execution: e, Steps: steps}
 	if in.Events, err = r.Executions.Events(ctx, executionID); err != nil {
@@ -59,6 +61,11 @@ func (r Reader) Bundle(ctx context.Context, executionID string) (domain.Executio
 	}
 	if in.Approvals, err = r.Executions.Approvals(ctx, executionID); err != nil {
 		return domain.ExecutionEvidence{}, err
+	}
+	for _, approval := range in.Approvals {
+		if approval.ProjectID != e.ProjectID || approval.Gate.ExecutionID != executionID || !stepIDs[approval.Gate.StepID] {
+			return domain.ExecutionEvidence{}, fmt.Errorf("%w: evidence store returned approval outside the execution scope", domain.ErrInvalid)
+		}
 	}
 	if in.Audit, err = r.approvalAudit(ctx, in.Approvals); err != nil {
 		return domain.ExecutionEvidence{}, err

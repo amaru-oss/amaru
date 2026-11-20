@@ -22,6 +22,7 @@ type executionRead struct {
 	id         string
 	fail       string
 	err        error
+	approval   *domain.Approval
 	auditCalls []int64
 	audit      func(int64, int) ([]domain.AuditEvent, error)
 }
@@ -41,6 +42,9 @@ func (s *executionRead) Events(context.Context, string) ([]domain.ExecutionEvent
 func (s *executionRead) Approvals(context.Context, string) ([]domain.Approval, error) {
 	if s.fail == "approvals" {
 		return nil, s.err
+	}
+	if s.approval != nil {
+		return []domain.Approval{*s.approval}, nil
 	}
 	return []domain.Approval{{ID: "a1", Gate: domain.ApprovalGate{ExecutionID: s.id, StepID: "s1"}}}, nil
 }
@@ -285,5 +289,21 @@ func TestBundleRejectsInvalidAuditPages(t *testing.T) {
 				t.Fatalf("audit calls = %v", s.auditCalls)
 			}
 		})
+	}
+}
+
+func TestBundleRejectsForeignApprovalBeforeAuditRead(t *testing.T) {
+	for _, gate := range []domain.Approval{
+		{ID: "a1", Gate: domain.ApprovalGate{ExecutionID: "foreign", StepID: "s1"}},
+		{ID: "a1", ProjectID: "foreign", Gate: domain.ApprovalGate{ExecutionID: "e1", StepID: "s1"}},
+		{ID: "a1", Gate: domain.ApprovalGate{ExecutionID: "e1", StepID: "unknown"}},
+	} {
+		r, s := readerFixture()
+		s.approval = &gate
+		b, err := r.Bundle(context.Background(), "e1")
+		assertNoBundle(t, b, err, domain.ErrInvalid)
+		if len(s.auditCalls) != 0 {
+			t.Error("queried audit for an Approval outside the Execution's scope")
+		}
 	}
 }
