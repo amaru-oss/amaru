@@ -179,3 +179,7 @@ that the response withholds the entire page, including its cursor.
 ## Follow-up
 
 The Project Execution read now rejects a store response containing a Step from a different Execution, even if the parent Execution matches. A fake store test verifies that the read returns no Execution or Steps.
+
+## Artifact version identity
+
+The Project artifact query refuses duplicate or non-positive version numbers in the index response. The coordinator test uses the same version number on two Projects and asserts metadata is withheld and no content blob is opened.
