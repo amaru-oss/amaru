@@ -53,13 +53,14 @@ func (s readAuthorityStream) ReadEvents(context.Context, domain.EventQuery, time
 }
 
 type readAuthorityEvidence struct {
-	after   func()
-	failure error
+	execution domain.Execution
+	after     func()
+	failure   error
 }
 
 func (s readAuthorityEvidence) Bundle(context.Context, string) (domain.ExecutionEvidence, error) {
 	s.after()
-	return domain.ExecutionEvidence{Digest: "private"}, s.failure
+	return domain.ExecutionEvidence{Execution: s.execution, Digest: "private"}, s.failure
 }
 
 type readAuthoritySettings struct {
@@ -78,8 +79,11 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 	owner := domain.Principal{Kind: domain.PrincipalHuman, ID: "owner", Role: domain.RoleOwner}
 	failed := errors.New("storage unavailable")
 	for _, operation := range []string{"project lookup", "execution", "approval", "events", "evidence", "settings", "artifact versions", "artifact content", "event ownership", "evidence ownership", "artifact ownership"} {
-		for _, outcome := range []string{"authorized", "revoked", "canceled", "identity changed", "storage error", "storage error with identity changed", "different record"} {
-			if outcome == "different record" && operation != "execution" && operation != "approval" {
+		for _, outcome := range []string{"authorized", "revoked", "canceled", "identity changed", "storage error", "storage error with identity changed", "different record", "foreign bundle"} {
+			if outcome == "different record" && operation != "execution" && operation != "approval" && operation != "evidence" {
+				continue
+			}
+			if outcome == "foreign bundle" && operation != "evidence" {
 				continue
 			}
 			if operation == "project lookup" && strings.HasPrefix(outcome, "storage error") {
@@ -177,7 +181,11 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 					got, err = api.Events(ctx, domain.EventQuery{ProjectID: string(project), Limit: 10}, readAuthorityStream{after, failure}, time.Hour)
 					zero = domain.EventPage{}
 				case "evidence", "evidence ownership":
-					got, err = api.Evidence(ctx, project, "execution", readAuthorityEvidence{after, failure})
+					execution := domain.Execution{ID: executionID, ProjectID: string(project)}
+					if outcome == "foreign bundle" {
+						execution.ProjectID = "foreign-project"
+					}
+					got, err = api.Evidence(ctx, project, "execution", readAuthorityEvidence{execution: execution, after: after, failure: failure})
 					zero = domain.ExecutionEvidence{}
 				case "settings":
 					got, err = api.Settings(ctx, project, readAuthoritySettings{after: after, failure: failure})
@@ -190,7 +198,7 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 					return
 				}
 				want := failed
-				if outcome == "different record" {
+				if outcome == "different record" || outcome == "foreign bundle" {
 					want = domain.ErrNotFound
 				}
 				if outcome == "revoked" || outcome == "identity changed" {
