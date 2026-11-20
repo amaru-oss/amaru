@@ -805,3 +805,40 @@ func TestAgentInItsWorktreeCannotWriteTheCheckout(t *testing.T) {
 		t.Fatalf("the Project checkout as a writable root must be refused: %v", err)
 	}
 }
+
+func TestWorktreeOperationsRefuseMismatchedCheckout(t *testing.T) {
+	for _, scenario := range []string{"foreign repository", "foreign linked worktree", "different branch", "detached HEAD"} {
+		t.Run(scenario, func(t *testing.T) {
+			ctx := context.Background()
+			e := newPrepared(t)
+			switch scenario {
+			case "foreign repository", "foreign linked worktree":
+				if err := os.Rename(e.wt, e.wt+"-original"); err != nil {
+					t.Fatal(err)
+				}
+				if scenario == "foreign repository" {
+					git(t, e.root, "clone", "-q", "-b", branch, e.origin, e.wt)
+				} else {
+					git(t, e.other, "fetch", "-q", "origin", branch)
+					git(t, e.other, "worktree", "add", "-q", "-b", branch, e.wt, e.implSHA)
+				}
+			case "different branch":
+				git(t, e.wt, "checkout", "-q", "-b", "other")
+			case "detached HEAD":
+				git(t, e.wt, "checkout", "-q", "--detach")
+			}
+			for name, run := range map[string]func() error{
+				"Prepare": func() error { _, err := e.r.Prepare(ctx, e.ws.Key, e.ws.Branch); return err },
+				"Sync":    func() error { _, err := e.r.Sync(ctx, e.ws, true); return err },
+				"Remove":  func() error { _, err := e.r.Remove(ctx, e.ws, true); return err },
+			} {
+				if err := run(); !errors.Is(err, domain.ErrConflict) {
+					t.Errorf("%s result = %v, want ErrConflict", name, err)
+				}
+			}
+			if got := git(t, e.wt, "rev-parse", "HEAD"); got != e.implSHA {
+				t.Fatalf("checkout HEAD = %s, want %s", got, e.implSHA)
+			}
+		})
+	}
+}
