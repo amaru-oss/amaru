@@ -2549,6 +2549,13 @@
       "kind": "valid",
       "expect": "valid",
       "note": "Exact Platform getExecution response for a single-Step Execution submitted without a Workflow; services/platform asserts equality"
+    },
+    {
+      "file": "api/v1/ExecutionList/valid-platform.json",
+      "schema": "ExecutionList.json",
+      "kind": "valid",
+      "expect": "valid",
+      "note": "Exact Platform listExecutions response for the httpapi Execution test seed (projectA); services/platform asserts equality"
     }
   ]
 }

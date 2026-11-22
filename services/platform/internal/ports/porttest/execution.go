@@ -3,6 +3,7 @@ package porttest
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -618,6 +619,33 @@ func ExecutionStore(t *testing.T, newStore func(t *testing.T) ports.ExecutionSto
 		}
 		if a, err := s.Active(ctx); err != nil || len(a) != 0 {
 			t.Fatalf("active after the Execution finished: %+v, %v", a, err)
+		}
+	})
+
+	t.Run("a Project's Executions, newest first, isolated from other Projects", func(t *testing.T) {
+		s := newStore(t)
+		for _, c := range []struct {
+			id, project string
+			at          time.Time
+		}{{"e1", "p1", t0}, {"e2", "p1", t0.Add(time.Minute)}, {"e3", "p1", t0.Add(time.Minute)}, {"e4", "p2", t0.Add(time.Hour)}, {"e5", "", t0}} {
+			e, steps := newExec(c.id, c.id+".s")
+			e.ProjectID, e.CreatedAt = c.project, c.at
+			mustCreate(t, s, e, steps)
+		}
+		// A finished Execution is still listed.
+		got, _, _ := s.Get(ctx, "e1")
+		if err := got.Finish(t0, domain.ExecCancelled, nil); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.Commit(ctx, ports.ExecutionChange{Execution: &got}); err != nil {
+			t.Fatal(err)
+		}
+		r := reopen(t, s)
+		for project, want := range map[string][]string{"p1": {"e3", "e2", "e1"}, "p2": {"e4"}, "unknown": {}} {
+			ids, err := r.ProjectExecutions(ctx, project)
+			if err != nil || ids == nil || !slices.Equal(ids, want) {
+				t.Fatalf("%s: %v, %v; want %v", project, ids, err, want)
+			}
 		}
 	})
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/rluders/amaru/services/platform/internal/adapter/localauth"
 	"github.com/rluders/amaru/services/platform/internal/coordinator"
 	"github.com/rluders/amaru/services/platform/internal/domain"
+	"github.com/rluders/amaru/services/platform/internal/ports"
 	"github.com/rluders/amaru/services/platform/internal/ports/fakes"
 	"go.yaml.in/yaml/v3"
 )
@@ -286,10 +287,9 @@ func TestExecutionRoutesMatchOpenAPI(t *testing.T) {
 			t.Fatalf("undocumented route: %s", pattern)
 		}
 	}
-	// Documented Execution operations not served yet: create and list need Agent, Skill and
-	// Environment resolution or a Project query; Event replay needs its envelope mapping.
+	// Documented Execution operations not served yet: create needs Agent, Skill and Environment
+	// resolution; Event replay needs its envelope mapping.
 	pending := map[string]bool{
-		"GET /v1/projects/{projectId}/executions":             true,
 		"POST /v1/projects/{projectId}/executions":            true,
 		"GET /v1/projects/{projectId}/executions/{id}/events": true,
 	}
@@ -350,5 +350,79 @@ func TestWireExecutionRefusesUnrepresentable(t *testing.T) {
 				t.Fatalf("mapped: %v", err)
 			}
 		})
+	}
+}
+
+func executionListPath(key domain.ProjectKey, query string) string {
+	return "/v1/projects/" + url.PathEscape(string(key)) + "/executions" + query
+}
+
+func TestExecutionListMatchesSharedFixture(t *testing.T) {
+	env := executionSetup(t)
+	w := call(env.h, env.auth, "GET", executionListPath(projectA, ""), "", nil)
+	check(t, w, 200, "")
+	sameFixture(t, w.Body.Bytes(), "ExecutionList/valid-platform.json")
+}
+
+func TestExecutionListIsProjectScopedAndFollowsCancel(t *testing.T) {
+	env := executionSetup(t)
+	list := func(key domain.ProjectKey) []struct{ ID, ProjectID, State string } {
+		t.Helper()
+		w := call(env.h, env.auth, "GET", executionListPath(key, ""), "", nil)
+		check(t, w, 200, "")
+		var out []struct{ ID, ProjectID, State string }
+		if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	if b := list(projectB); len(b) != 1 || b[0].ID != "exec-b" || b[0].ProjectID != string(projectB) {
+		t.Fatalf("projectB: %+v", b)
+	}
+	check(t, call(env.h, env.auth, "POST", executionPath(projectA, "exec-a")+"/cancel", `{"idempotencyKey":"c"}`, nil), 200, "")
+	if a := list(projectA); len(a) != 1 || a[0].ID != "exec-a" || a[0].State != "cancelled" {
+		t.Fatalf("projectA after cancel: %+v", a)
+	}
+	if b := list(projectB); len(b) != 1 || b[0].State != "queued" {
+		t.Fatalf("projectB changed: %+v", b)
+	}
+}
+
+func TestExecutionListRefusals(t *testing.T) {
+	env := executionSetup(t)
+	for _, query := range []string{"?state=running", "?limit=1", "?"} {
+		w := call(env.h, env.auth, "GET", executionListPath(projectA, query), "", nil)
+		if query == "?" {
+			// An empty query string carries no parameter.
+			check(t, w, 200, "")
+			continue
+		}
+		check(t, w, 400, "invalid_request")
+	}
+	check(t, call(env.h, env.auth, "GET", executionListPath("id:01ARZ3NDEKTSV4RRFFQ69G5FAZ", ""), "", nil), 404, "not_found")
+	check(t, call(env.h, nil, "GET", executionListPath(projectA, ""), "", nil), 401, "unauthorized")
+	cookie, _ := launch(t, env.auth, env.h)
+	if w := callHost(env.h, "GET", executionListPath(projectA, ""), "", map[string]string{"Cookie": cookie, "Host": "evil.example:7777"}); w.Code < 400 {
+		t.Fatalf("foreign host accepted: %d", w.Code)
+	}
+}
+
+func TestExecutionListRefusesUnrepresentable(t *testing.T) {
+	env := executionSetup(t)
+	ctx := context.Background()
+	e, _, err := env.store.Get(ctx, "exec-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A failed Execution without its error cannot be described; the store accepts the row.
+	ended := approvalNow
+	e.State, e.EndedAt = domain.ExecFailed, &ended
+	if _, err := env.store.Commit(ctx, ports.ExecutionChange{Execution: &e}); err != nil {
+		t.Fatal(err)
+	}
+	w := call(env.h, env.auth, "GET", executionListPath(projectA, ""), "", nil)
+	check(t, w, 500, "internal")
+	if strings.Contains(w.Body.String(), "exec-a") {
+		t.Fatalf("internal error leaked the id: %s", w.Body)
 	}
 }

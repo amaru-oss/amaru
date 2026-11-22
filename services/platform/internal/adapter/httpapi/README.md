@@ -10,4 +10,4 @@ See the [operation inventory and limits](../../../../../docs/engineering/project
 
 `ApprovalsHandler` serves the Approval list, read and decision operations on the same terms: one Auth instance, the authorized `ProjectAccess` boundary and no production startup. See the [Approval adapter notes](../../../../../docs/engineering/project-access.md#guarded-approval-http-adapter).
 
-`ExecutionsHandler` serves Execution read and cancel on the same terms. See the [Execution adapter notes](../../../../../docs/engineering/project-access.md#guarded-execution-http-adapter).
+`ExecutionsHandler` serves the Execution list, read and cancel operations on the same terms. See the [Execution adapter notes](../../../../../docs/engineering/project-access.md#guarded-execution-http-adapter).

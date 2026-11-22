@@ -17,10 +17,12 @@ import (
 	"github.com/rluders/amaru/services/platform/internal/domain"
 )
 
-// executionPatterns are the served Execution operations: getExecution and cancelExecution.
+// executionPatterns are the served Execution operations: getExecution, cancelExecution and
+// listExecutions.
 var executionPatterns = []string{
 	"GET /v1/projects/{projectId}/executions/{id}",
 	"POST /v1/projects/{projectId}/executions/{id}/cancel",
+	"GET /v1/projects/{projectId}/executions",
 }
 
 const (
@@ -60,6 +62,28 @@ func ExecutionsHandler(auth *localauth.Auth, access *coordinator.ProjectAccess) 
 			return
 		}
 		writeExecution(w, r, access, project, id)
+	})
+	mux.HandleFunc(executionPatterns[2], func(w http.ResponseWriter, r *http.Request) {
+		if len(r.URL.Query()) > 0 {
+			reject(w, 400, "invalid_request")
+			return
+		}
+		list, err := access.Executions(r.Context(), domain.ProjectKey(r.PathValue("projectId")))
+		if err != nil {
+			accessError(w, err)
+			return
+		}
+		// One unrepresentable Execution fails the whole list; none is silently dropped.
+		out := make([]wireExecutionBody, 0, len(list))
+		for _, rec := range list {
+			body, err := wireExecution(rec.Execution, rec.Steps)
+			if err != nil {
+				accessError(w, err)
+				return
+			}
+			out = append(out, body)
+		}
+		respond(w, http.StatusOK, out)
 	})
 	return auth.Handler(mux), nil
 }
