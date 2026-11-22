@@ -2528,6 +2528,13 @@
       "kind": "valid",
       "expect": "valid",
       "note": "Exact Platform HTTP response for the httpapi approval test seed; services/platform asserts equality"
+    },
+    {
+      "file": "api/v1/ApprovalList/valid-platform-requested.json",
+      "schema": "ApprovalList.json",
+      "kind": "valid",
+      "expect": "valid",
+      "note": "Exact Platform listApprovals response (default state) for the httpapi approval test seed; services/platform asserts equality"
     }
   ]
 }
