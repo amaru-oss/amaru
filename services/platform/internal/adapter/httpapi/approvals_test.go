@@ -19,6 +19,7 @@ import (
 	"github.com/rluders/amaru/services/platform/internal/adapter/localauth"
 	"github.com/rluders/amaru/services/platform/internal/coordinator"
 	"github.com/rluders/amaru/services/platform/internal/domain"
+	"github.com/rluders/amaru/services/platform/internal/ports"
 	"github.com/rluders/amaru/services/platform/internal/ports/fakes"
 	"go.yaml.in/yaml/v3"
 )
@@ -307,10 +308,140 @@ func TestApprovalRoutesMatchOpenAPI(t *testing.T) {
 			t.Fatalf("undocumented route: %s", pattern)
 		}
 	}
-	// listApprovals is documented but intentionally not served yet (no Project-scoped query).
-	if _, ok := doc.Paths["/projects/{projectId}/approvals"]["get"]; !ok {
-		t.Fatal("listApprovals no longer documented; revisit the served set")
+	// Every documented Approval operation is served.
+	for path, ops := range doc.Paths {
+		if !strings.Contains(path, "/approvals") {
+			continue
+		}
+		for method := range ops {
+			if method == "parameters" {
+				continue
+			}
+			served := false
+			for _, pattern := range approvalPatterns {
+				served = served || pattern == strings.ToUpper(method)+" /v1"+path
+			}
+			if !served {
+				t.Fatalf("documented Approval operation not served: %s %s", method, path)
+			}
+		}
 	}
+}
+
+func listPath(key domain.ProjectKey, query string) string {
+	return "/v1/projects/" + url.PathEscape(string(key)) + "/approvals" + query
+}
+
+func TestApprovalListMatchesSharedFixture(t *testing.T) {
+	env := approvalSetup(t)
+	w := call(env.h, env.auth, "GET", listPath(projectA, ""), "", nil)
+	check(t, w, 200, "")
+	data, err := os.ReadFile("../../../../../packages/contracts/fixtures/api/v1/ApprovalList/valid-platform-requested.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got, want any
+	if json.Unmarshal(w.Body.Bytes(), &got) != nil || json.Unmarshal(data, &want) != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("response differs from the shared fixture:\n%s", w.Body)
+	}
+	// The default state is requested; naming it explicitly answers the same body.
+	explicit := call(env.h, env.auth, "GET", listPath(projectA, "?state=requested"), "", nil)
+	check(t, explicit, 200, "")
+	if explicit.Body.String() != w.Body.String() {
+		t.Fatal("explicit requested state differs from the default")
+	}
+}
+
+func TestApprovalListIsProjectScopedAndFollowsDecisions(t *testing.T) {
+	env := approvalSetup(t)
+	ids := func(key domain.ProjectKey, query string) []string {
+		t.Helper()
+		w := call(env.h, env.auth, "GET", listPath(key, query), "", nil)
+		check(t, w, 200, "")
+		var out []map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil || out == nil {
+			t.Fatalf("list body %q: %v", w.Body, err)
+		}
+		var got []string
+		for _, a := range out {
+			if a["projectId"] != string(key) {
+				t.Fatalf("foreign Approval listed: %v", a)
+			}
+			got = append(got, a["id"].(string))
+		}
+		return got
+	}
+	if got := ids(projectB, ""); !reflect.DeepEqual(got, []string{"01JD7Q0000000000000000000B"}) {
+		t.Fatalf("projectB requested: %v", got)
+	}
+	decide := call(env.h, env.auth, "POST", approvalPath(projectA, env.pending.ID)+"/decision", decisionBody("approved", env.pending.Evidence.Digest, "", "list-1"), nil)
+	check(t, decide, 200, "")
+	if got := ids(projectA, ""); got != nil {
+		t.Fatalf("decided Approval still requested: %v", got)
+	}
+	if got := ids(projectA, "?state=approved"); !reflect.DeepEqual(got, []string{env.pending.ID}) {
+		t.Fatalf("projectA approved: %v", got)
+	}
+	if got := ids(projectB, "?state=approved"); got != nil {
+		t.Fatalf("projectB approved: %v", got)
+	}
+	if w := call(env.h, env.auth, "GET", listPath(projectA, "?state=rejected"), "", nil); w.Body.String() != "[]\n" && w.Body.String() != "[]" {
+		t.Fatalf("empty list must be an array: %q", w.Body)
+	}
+}
+
+func TestApprovalListRefusals(t *testing.T) {
+	env := approvalSetup(t)
+	missing := domain.ProjectKey("ssh://github.com/acme/missing#0123456789abcdef0123456789abcdef01234567")
+	for name, tc := range map[string]struct {
+		target string
+		status int
+		code   string
+	}{
+		"unknown state":   {listPath(projectA, "?state=pending"), 400, "invalid_request"},
+		"empty state":     {listPath(projectA, "?state="), 400, "invalid_request"},
+		"repeated state":  {listPath(projectA, "?state=requested&state=approved"), 400, "invalid_request"},
+		"unknown Project": {listPath(missing, ""), 404, "not_found"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			check(t, call(env.h, env.auth, "GET", tc.target, "", nil), tc.status, tc.code)
+		})
+	}
+	if w := callHost(env.h, "GET", listPath(projectA, ""), "", nil); w.Code != 401 {
+		t.Fatalf("unauthenticated list: %d", w.Code)
+	}
+	if w := callHost(env.h, "GET", listPath(projectA, ""), "", map[string]string{"Host": "evil.example:7777"}); w.Code < 400 || w.Code >= 500 {
+		t.Fatalf("foreign Host list: %d", w.Code)
+	}
+}
+
+// A voided Approval is not representable (no voidedBy); listing it fails the whole response
+// rather than dropping or approximating it.
+func TestApprovalListRefusesUnrepresentable(t *testing.T) {
+	env := approvalSetup(t)
+	ctx := context.Background()
+	_, steps, err := env.store.Get(ctx, env.pending.Gate.ExecutionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := env.pending
+	a.Version = 1
+	if err := a.Void(approvalNow, "execution_cancelled"); err != nil {
+		t.Fatal(err)
+	}
+	st := steps[0]
+	if err := st.CancelAwaiting(approvalNow); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.store.Commit(ctx, ports.ExecutionChange{Steps: []domain.StepExecution{st}, Approvals: []domain.Approval{a}}); err != nil {
+		t.Fatal(err)
+	}
+	w := call(env.h, env.auth, "GET", listPath(projectA, "?state=voided"), "", nil)
+	check(t, w, 500, "internal")
+	if strings.Contains(w.Body.String(), a.ID) {
+		t.Fatal("refused list leaked the Approval")
+	}
+	check(t, call(env.h, env.auth, "GET", listPath(projectB, "?state=voided"), "", nil), 200, "")
 }
 
 func TestWireApprovalMapping(t *testing.T) {

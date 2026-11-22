@@ -16,11 +16,12 @@ import (
 	"github.com/rluders/amaru/services/platform/internal/domain"
 )
 
-// approvalPatterns are the served Approval operations. listApprovals is not served: it needs a
-// Project-scoped Approval query that does not exist yet.
+// approvalPatterns are the served Approval operations: listApprovals, getApproval and
+// decideApproval.
 var approvalPatterns = []string{
 	"GET /v1/projects/{projectId}/approvals/{approvalId}",
 	"POST /v1/projects/{projectId}/approvals/{approvalId}/decision",
+	"GET /v1/projects/{projectId}/approvals",
 }
 
 const maxDecisionBody = 8192
@@ -69,6 +70,33 @@ func ApprovalsHandler(auth *localauth.Auth, access *coordinator.ProjectAccess) (
 		}
 		writeApproval(w, r, access, project, decided.Approval)
 	})
+	mux.HandleFunc(approvalPatterns[2], func(w http.ResponseWriter, r *http.Request) {
+		project := domain.ProjectKey(r.PathValue("projectId"))
+		state := domain.ApprovalRequested
+		if values, ok := r.URL.Query()["state"]; ok {
+			if len(values) != 1 {
+				reject(w, 400, "invalid_request")
+				return
+			}
+			state = domain.ApprovalState(values[0])
+		}
+		list, err := access.Approvals(r.Context(), project, state)
+		if err != nil {
+			approvalError(w, err)
+			return
+		}
+		// One unrepresentable Approval fails the whole list; none is silently dropped.
+		out := make([]wireApprovalBody, 0, len(list))
+		for _, a := range list {
+			body, err := mapApproval(r, access, project, a)
+			if err != nil {
+				approvalError(w, err)
+				return
+			}
+			out = append(out, body)
+		}
+		respond(w, http.StatusOK, out)
+	})
 	return auth.Handler(mux), nil
 }
 
@@ -112,27 +140,30 @@ func decodeDecision(w http.ResponseWriter, r *http.Request) (coordinator.DecideR
 	return req, true
 }
 
-// writeApproval maps a stored Approval to the public shape. A pinned definition item needs its
-// Execution's committed revision, which is read through the same authorized boundary.
 func writeApproval(w http.ResponseWriter, r *http.Request, access *coordinator.ProjectAccess, project domain.ProjectKey, a domain.Approval) {
-	var pin *domain.DefinitionPin
-	for _, it := range a.Evidence.Items {
-		if it.Kind == "definition" {
-			e, _, err := access.Execution(r.Context(), project, a.Gate.ExecutionID)
-			if err != nil {
-				approvalError(w, err)
-				return
-			}
-			pin = e.Definition
-			break
-		}
-	}
-	out, err := wireApproval(a, pin)
+	out, err := mapApproval(r, access, project, a)
 	if err != nil {
 		approvalError(w, err)
 		return
 	}
 	respond(w, http.StatusOK, out)
+}
+
+// mapApproval maps a stored Approval to the public shape. A pinned definition item needs its
+// Execution's committed revision, which is read through the same authorized boundary.
+func mapApproval(r *http.Request, access *coordinator.ProjectAccess, project domain.ProjectKey, a domain.Approval) (wireApprovalBody, error) {
+	var pin *domain.DefinitionPin
+	for _, it := range a.Evidence.Items {
+		if it.Kind == "definition" {
+			e, _, err := access.Execution(r.Context(), project, a.Gate.ExecutionID)
+			if err != nil {
+				return wireApprovalBody{}, err
+			}
+			pin = e.Definition
+			break
+		}
+	}
+	return wireApproval(a, pin)
 }
 
 type wirePrincipal struct {
