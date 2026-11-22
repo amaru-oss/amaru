@@ -26,6 +26,7 @@ CREATE TABLE approvals (
 );
 CREATE INDEX approvals_by_execution ON approvals (execution_id, requested_at, id);
 CREATE INDEX approvals_by_step ON approvals (step_id);
+CREATE INDEX approvals_by_project ON approvals (project_id, state, requested_at DESC, id DESC);
 
 -- +goose StatementBegin
 CREATE FUNCTION approvals_are_append_only() RETURNS trigger AS $$

@@ -177,6 +177,38 @@ func (a *ProjectAccess) Approval(ctx context.Context, project domain.ProjectKey,
 	return approval, nil
 }
 
+// Approvals lists the selected Project's Approvals in one state, newest request first. Identity
+// is rechecked after the store read; a row from another Project or state fails the whole read
+// rather than being filtered, because the store contract was broken.
+func (a *ProjectAccess) Approvals(ctx context.Context, project domain.ProjectKey, state domain.ApprovalState) ([]domain.Approval, error) {
+	switch state {
+	case domain.ApprovalRequested, domain.ApprovalApproved, domain.ApprovalRejected, domain.ApprovalExpired, domain.ApprovalVoided:
+	default:
+		return nil, domain.ErrInvalid
+	}
+	by, err := a.authorize(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	list, err := a.coordinator.store.ProjectApprovals(ctx, string(project), state)
+	if err != nil {
+		return nil, err
+	}
+	for _, approval := range list {
+		if approval.ProjectID != string(project) || approval.State != state {
+			return nil, errors.New("project approvals: store returned a row outside the query")
+		}
+	}
+	current, err := a.authorize(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	if current.ID != by.ID {
+		return nil, domain.ErrNotPermitted
+	}
+	return list, nil
+}
+
 func (a *ProjectAccess) DecideApproval(ctx context.Context, project domain.ProjectKey, req DecideRequest) (Decided, bool, error) {
 	by, err := a.authorize(ctx, project)
 	if err != nil {

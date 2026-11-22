@@ -399,6 +399,24 @@ func (s *ExecutionStore) Approvals(_ context.Context, executionID string) ([]dom
 	return out, nil
 }
 
+func (s *ExecutionStore) ProjectApprovals(_ context.Context, projectID string, state domain.ApprovalState) ([]domain.Approval, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := []domain.Approval{}
+	for _, a := range s.apprs {
+		if a.ProjectID == projectID && a.State == state {
+			out = append(out, clone(a))
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].RequestedAt.Equal(out[j].RequestedAt) {
+			return out[i].RequestedAt.After(out[j].RequestedAt)
+		}
+		return out[i].ID > out[j].ID
+	})
+	return out, nil
+}
+
 // Audit implements ports.AuditLog.
 func (s *ExecutionStore) Audit(ctx context.Context, after int64, limit int) ([]domain.AuditEvent, error) {
 	return s.log.Audit(ctx, after, limit)

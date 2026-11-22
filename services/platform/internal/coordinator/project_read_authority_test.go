@@ -35,6 +35,17 @@ func (s readAuthorityStore) Approval(context.Context, string) (domain.Approval, 
 	return domain.Approval{ID: "approval", ProjectID: string(s.project), Gate: domain.ApprovalGate{ExecutionID: "execution"}}, s.failure
 }
 
+func (s readAuthorityStore) ProjectApprovals(_ context.Context, project string, state domain.ApprovalState) ([]domain.Approval, error) {
+	s.after()
+	if s.failure != nil {
+		return nil, s.failure
+	}
+	if s.stepExecution == "foreign-approval" {
+		project = "foreign-project"
+	}
+	return []domain.Approval{{ID: "approval", ProjectID: project, State: state}}, nil
+}
+
 type readAuthorityProjects struct {
 	ports.ProjectStore
 	after func()
@@ -83,12 +94,15 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 	project := domain.ProjectKey("ssh://github.com/acme/a#0123456789abcdef0123456789abcdef01234567")
 	owner := domain.Principal{Kind: domain.PrincipalHuman, ID: "owner", Role: domain.RoleOwner}
 	failed := errors.New("storage unavailable")
-	for _, operation := range []string{"project lookup", "execution", "approval", "events", "evidence", "settings", "artifact versions", "artifact content", "event ownership", "evidence ownership", "artifact ownership"} {
-		for _, outcome := range []string{"authorized", "revoked", "canceled", "identity changed", "storage error", "storage error with identity changed", "different record", "foreign bundle", "foreign step", "foreign event project", "foreign event execution"} {
+	for _, operation := range []string{"project lookup", "execution", "approval", "approvals", "events", "evidence", "settings", "artifact versions", "artifact content", "event ownership", "evidence ownership", "artifact ownership"} {
+		for _, outcome := range []string{"authorized", "revoked", "canceled", "identity changed", "storage error", "storage error with identity changed", "different record", "foreign bundle", "foreign step", "foreign approval", "foreign event project", "foreign event execution"} {
 			if outcome == "different record" && operation != "execution" && operation != "approval" && operation != "evidence" {
 				continue
 			}
 			if outcome == "foreign step" && operation != "execution" {
+				continue
+			}
+			if outcome == "foreign approval" && operation != "approvals" {
 				continue
 			}
 			if outcome == "foreign bundle" && operation != "evidence" {
@@ -128,11 +142,14 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 				if outcome == "foreign step" {
 					store.stepExecution = "other-execution"
 				}
+				if outcome == "foreign approval" {
+					store.stepExecution = "foreign-approval"
+				}
 				var projectStore ports.ProjectStore = projects
 				if operation == "project lookup" {
 					projectStore = readAuthorityProjects{projects, after}
 				}
-				if operation == "execution" || operation == "approval" || strings.HasSuffix(operation, "ownership") {
+				if operation == "execution" || operation == "approval" || operation == "approvals" || strings.HasSuffix(operation, "ownership") {
 					store.after, store.failure = after, failure
 				}
 				api, err := coordinator.NewProjectAccess(coordinator.New(store, time.Now), projectStore, func(context.Context) (domain.Principal, error) {
@@ -179,6 +196,10 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 				case "approval":
 					got, err = api.Approval(ctx, project, approvalID)
 					zero = domain.Approval{}
+				case "approvals":
+					var list []domain.Approval
+					list, err = api.Approvals(ctx, project, domain.ApprovalRequested)
+					got, zero = list, []domain.Approval(nil)
 				case "event ownership":
 					got, err = api.Events(ctx, domain.EventQuery{ProjectID: string(project), ExecutionID: "execution", Limit: 10}, readAuthorityStream{page: domain.EventPage{Cursor: 42}, after: func() {}}, time.Hour)
 					zero = domain.EventPage{}
@@ -226,6 +247,12 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 					return
 				}
 				want := failed
+				if outcome == "foreign approval" {
+					if err == nil || errors.Is(err, domain.ErrNotFound) || !reflect.DeepEqual(got, zero) {
+						t.Fatalf("foreign row must fail the read without data: %v", err)
+					}
+					return
+				}
 				if outcome == "different record" || outcome == "foreign bundle" || outcome == "foreign step" || strings.HasPrefix(outcome, "foreign event") {
 					want = domain.ErrNotFound
 				}

@@ -124,6 +124,23 @@ func (s *ExecutionStore) Approvals(ctx context.Context, executionID string) ([]d
 	return out, rows.Err()
 }
 
+func (s *ExecutionStore) ProjectApprovals(ctx context.Context, projectID string, state domain.ApprovalState) ([]domain.Approval, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+approvalColumns+` FROM approvals WHERE project_id = $1 AND state = $2 ORDER BY requested_at DESC, id DESC`, projectID, string(state))
+	if err != nil {
+		return nil, fmt.Errorf("postgres: project approvals: %w", err)
+	}
+	defer rows.Close()
+	out := []domain.Approval{}
+	for rows.Next() {
+		a, err := scanApproval(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
 func scanApproval(r rowScanner) (domain.Approval, error) {
 	var a domain.Approval
 	var state, kind, capability, minRole string

@@ -8,4 +8,4 @@ From the repository root, `make platform-test` runs these tests and `make check`
 
 See the [operation inventory and limits](../../../../../docs/engineering/project-access.md#guarded-settings-http-adapter).
 
-`ApprovalsHandler` serves the Approval read and decision operations on the same terms: one Auth instance, the authorized `ProjectAccess` boundary and no production startup. `listApprovals` is not served. See the [Approval adapter notes](../../../../../docs/engineering/project-access.md#guarded-approval-http-adapter).
+`ApprovalsHandler` serves the Approval list, read and decision operations on the same terms: one Auth instance, the authorized `ProjectAccess` boundary and no production startup. See the [Approval adapter notes](../../../../../docs/engineering/project-access.md#guarded-approval-http-adapter).

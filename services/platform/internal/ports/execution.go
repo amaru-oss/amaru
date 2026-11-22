@@ -58,6 +58,9 @@ type ExecutionStore interface {
 	// Approvals returns the Execution's Approvals in request order, or domain.ErrNotFound for an
 	// Execution that does not exist.
 	Approvals(ctx context.Context, executionID string) ([]domain.Approval, error)
+	// ProjectApprovals returns the Project's Approvals in the given state, newest request first
+	// (requested time, then id, both descending). An unknown Project has none.
+	ProjectApprovals(ctx context.Context, projectID string, state domain.ApprovalState) ([]domain.Approval, error)
 	// AuditLog is the log that records every Approval change made through this store.
 	AuditLog
 	ExecutionQueue
