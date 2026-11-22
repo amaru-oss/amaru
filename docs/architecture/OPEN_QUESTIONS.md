@@ -6,10 +6,10 @@ Questions that block or shape decisions. Each is closed by an ADR ([DECISIONS](D
 
 ### Q68. Project-scoped Work contract and unresolved mappings
 
-- **Question:** approve the four Work contract choices and atomic ownership/dependency boundaries in [proposed ADR-0070](adr/0070-project-scoped-work-command-contract.md)?
+- **Question:** how should the Work mappings that [accepted ADR-0070](adr/0070-project-scoped-work-command-contract.md) leaves open be resolved? (Its four contract choices and atomic boundaries were approved on 2026-11-22.)
 - **Evidence:** #191 comment on 2026-11-14 and source inspection at `159f38d` show optional create owner, unallocated display prefixes, no reopen-reason input/Event history, and no Work command keys/versions. The ADR links exact schemas/domain sources and maps follow-up surfaces.
 - **Open evidence gaps:** WorkOwner has no principal reference, so accountable human identity/reassignment cannot be inferred. Public workflowId/external/deliveryLoop fields exceed the current Work domain model; their validation, storage and command normalization need source-backed mapping before exposure, without silently dropping fields. The accepted start-only dependency rule requires a visible signal on prerequisite regression, but the exact typed Event mapping and recipient behavior remain unresolved. Do not invent wire fields for these gaps.
-- **Owner:** Ricardo Lüders. **Status:** open; ADR-0070 is proposed with empty deciders. Approving its four choices does not silently resolve these remaining mappings. No Work implementation, full #191/#18 acceptance or issue closure is claimed.
+- **Owner:** Ricardo Lüders. **Status:** open. ADR-0070 was accepted by Ricardo Lüders on 2026-11-22; that approval does not resolve these remaining mappings. No Work implementation, full #191/#18 acceptance or issue closure is claimed.
 
 ### Q66. Public Project inspection and unavailable clone responses
 

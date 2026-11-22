@@ -1,15 +1,15 @@
 ---
 title: Define Project-scoped Work ownership, keys, reopening and command concurrency
-status: proposed
+status: accepted
 date: 2026-11-14
-deciders:
+deciders: Ricardo Lüders
 ---
 
 # 0070. Define Project-scoped Work ownership, keys, reopening and command concurrency
 
 ## Context
 
-**Proposed; owner approval is required before implementation.** This proposal addresses four contract ambiguities identified in [#191](https://github.com/rluders/amaru/issues/191#issuecomment-6869149642) within [#18](https://github.com/rluders/amaru/issues/18). It supplements, and does not supersede, accepted [ADR-0058](0058-command-idempotency-conflicts-and-retention.md) and [ADR-0062](0062-project-bound-public-operations-and-secret-resolution.md). No runtime or wire change is delivered here.
+**Accepted by the product owner on 2026-11-22.** This decision addresses four contract ambiguities identified in [#191](https://github.com/rluders/amaru/issues/191#issuecomment-6869149642) within [#18](https://github.com/rluders/amaru/issues/18). It supplements, and does not supersede, accepted [ADR-0058](0058-command-idempotency-conflicts-and-retention.md) and [ADR-0062](0062-project-bound-public-operations-and-secret-resolution.md). No runtime or wire change is delivered here.
 
 Evidence inspected at `159f38d70b3bf22b1ebecb72524a93ef93c00f34`:
 
@@ -24,7 +24,7 @@ Evidence inspected at `159f38d70b3bf22b1ebecb72524a93ef93c00f34`:
 
 ## Decision
 
-Everything in this section is a recommendation awaiting approval. Proposed field names below are future contract changes, not currently accepted request fields.
+Accepted 2026-11-22. Field names below are approved future contract changes; they are not yet in the contracts or the Platform.
 
 ### 1. Responsibility and Project ownership
 
@@ -72,7 +72,7 @@ A crash before commit leaves no successful outcome or visible Work change. A los
 
 The four public mutation paths become reviewable without conflating retry safety with concurrent edit protection. Stable prefixes trade mnemonic Project names for simple collision freedom. Per-Project serialization costs throughput but protects graph-wide invariants; revisit with measured contention, preserving semantics. Durable outcomes and history grow storage under ADR-0058. Owner labels still cannot identify accountable principals.
 
-Implementation remains blocked on owner approval and the unresolved mappings in [Q68](../OPEN_QUESTIONS.md#q68-project-scoped-work-contract-and-unresolved-mappings). Update the unreleased current contracts directly under the pre-v1.0 rule; no compatibility shim, backfill, prototype migration or speculative package belongs in this proposal. Preserve existing data/work. Any eventual deployment/purge policy must be resolved before enabling destructive changes.
+Implementation remains blocked on the unresolved mappings in [Q68](../OPEN_QUESTIONS.md#q68-project-scoped-work-contract-and-unresolved-mappings). Update the unreleased current contracts directly under the pre-v1.0 rule; no compatibility shim, backfill, prototype migration or speculative package belongs in this proposal. Preserve existing data/work. Any eventual deployment/purge policy must be resolved before enabling destructive changes.
 
 Affected surfaces for an approved implementation (mapping only; unchanged here):
 
@@ -88,7 +88,7 @@ Affected surfaces for an approved implementation (mapping only; unchanged here):
 
 Required future checks include sequential/concurrent duplicates, conflicting key reuse across Projects/actors, replay after later version/status changes and authority revocation, opposite-edge cycle races, stale writes, foreign Package/dependency rejection, prefix collisions/clones/exhaustion and crash injection before/after commit and during Event/outcome insertion. Run these against fakes and PostgreSQL plus public SDK composition. None is runtime-validated by this documentation change.
 
-Architecture-review verdict: **needs human decision**. Platform ownership, API-only Clients, UI-agnostic contracts, pure domain and local/server adapter parity are preserved. No new runtime, library or infrastructure dependency, secret access, egress or execution permission is proposed. The primary failure risks are partial persistence, unauthorized replay disclosure and graph write skew; the transaction and authority rules above address them as requirements, not proven implementation. Q68 records the remaining evidence gaps.
+Architecture-review verdict at proposal: **needs human decision** (since given, 2026-11-22). Platform ownership, API-only Clients, UI-agnostic contracts, pure domain and local/server adapter parity are preserved. No new runtime, library or infrastructure dependency, secret access, egress or execution permission is proposed. The primary failure risks are partial persistence, unauthorized replay disclosure and graph write skew; the transaction and authority rules above address them as requirements, not proven implementation. Q68 records the remaining evidence gaps.
 
 ## Alternatives considered
 
@@ -100,4 +100,4 @@ Architecture-review verdict: **needs human decision**. Platform ownership, API-o
 
 ## Approval
 
-Proposed by Codex for #191. Owner approval is required; no approval is recorded. Deciders remain empty. This document neither accepts an ADR nor authorizes implementation, issue closure, Project updates or merge.
+Proposed by Codex for #191. Accepted by Ricardo Lüders on 2026-11-22 in the repository task conversation: “ADR approved.” The approval covers the four Work contract choices and the atomic ownership/dependency boundaries above. It does not resolve the remaining [Q68](../OPEN_QUESTIONS.md#q68-project-scoped-work-contract-and-unresolved-mappings) mappings (principal-linked responsibility, Workflow/external/delivery-loop Work fields, dependency-regression Event mapping), which still gate exposing those parts. It authorizes no issue closure or merge.
