@@ -29,9 +29,9 @@ const maxDecisionBody = 8192
 var digestRe = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 var bareSHA256Re = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
-// errUnrepresentable marks a stored Approval that the public contract cannot describe. It is
+// errUnrepresentable marks a stored record that the public contract cannot describe. It is
 // answered as internal, never with a partial or invented body.
-var errUnrepresentable = errors.New("approval is not representable in the public contract")
+var errUnrepresentable = errors.New("record is not representable in the public contract")
 
 // ApprovalsHandler includes the compact Host/Origin/session/CSRF guard. access must use this
 // Auth instance and the same authoritative Instance stores.
@@ -44,7 +44,7 @@ func ApprovalsHandler(auth *localauth.Auth, access *coordinator.ProjectAccess) (
 		project, id := domain.ProjectKey(r.PathValue("projectId")), r.PathValue("approvalId")
 		approval, err := access.Approval(r.Context(), project, id)
 		if err != nil {
-			approvalError(w, err)
+			accessError(w, err)
 			return
 		}
 		writeApproval(w, r, access, project, approval)
@@ -53,7 +53,7 @@ func ApprovalsHandler(auth *localauth.Auth, access *coordinator.ProjectAccess) (
 		project, id := domain.ProjectKey(r.PathValue("projectId")), r.PathValue("approvalId")
 		// The authorized read checks Project ownership before decoding any client body.
 		if _, err := access.Approval(r.Context(), project, id); err != nil {
-			approvalError(w, err)
+			accessError(w, err)
 			return
 		}
 		req, ok := decodeDecision(w, r)
@@ -65,7 +65,7 @@ func ApprovalsHandler(auth *localauth.Auth, access *coordinator.ProjectAccess) (
 		// never names one.
 		decided, _, err := access.DecideApproval(r.Context(), project, req)
 		if err != nil {
-			approvalError(w, err)
+			accessError(w, err)
 			return
 		}
 		writeApproval(w, r, access, project, decided.Approval)
@@ -82,7 +82,7 @@ func ApprovalsHandler(auth *localauth.Auth, access *coordinator.ProjectAccess) (
 		}
 		list, err := access.Approvals(r.Context(), project, state)
 		if err != nil {
-			approvalError(w, err)
+			accessError(w, err)
 			return
 		}
 		// One unrepresentable Approval fails the whole list; none is silently dropped.
@@ -90,7 +90,7 @@ func ApprovalsHandler(auth *localauth.Auth, access *coordinator.ProjectAccess) (
 		for _, a := range list {
 			body, err := mapApproval(r, access, project, a)
 			if err != nil {
-				approvalError(w, err)
+				accessError(w, err)
 				return
 			}
 			out = append(out, body)
@@ -143,7 +143,7 @@ func decodeDecision(w http.ResponseWriter, r *http.Request) (coordinator.DecideR
 func writeApproval(w http.ResponseWriter, r *http.Request, access *coordinator.ProjectAccess, project domain.ProjectKey, a domain.Approval) {
 	out, err := mapApproval(r, access, project, a)
 	if err != nil {
-		approvalError(w, err)
+		accessError(w, err)
 		return
 	}
 	respond(w, http.StatusOK, out)
@@ -293,7 +293,7 @@ func evidenceItem(it domain.EvidenceItem, pin *domain.DefinitionPin) (map[string
 	return nil, fmt.Errorf("%w: evidence item %q", errUnrepresentable, it.Kind)
 }
 
-func approvalError(w http.ResponseWriter, err error) {
+func accessError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, domain.ErrNotPermitted):
 		reject(w, 403, "forbidden")
