@@ -11,3 +11,5 @@ See the [operation inventory and limits](../../../../../docs/engineering/project
 `ApprovalsHandler` serves the Approval list, read and decision operations on the same terms: one Auth instance, the authorized `ProjectAccess` boundary and no production startup. See the [Approval adapter notes](../../../../../docs/engineering/project-access.md#guarded-approval-http-adapter).
 
 `ExecutionsHandler` serves the Execution list, read and cancel operations on the same terms. See the [Execution adapter notes](../../../../../docs/engineering/project-access.md#guarded-execution-http-adapter). `ExecutionEventsHandler` serves one Execution's persisted Events (`listExecutionEvents`) on the same terms, with a trusted Event stream and replay window. See the [Event replay notes](../../../../../docs/engineering/project-access.md#execution-event-replay-over-http).
+
+`ProductHandler` assembles all of the above behind one router for the Platform HTTP owner, with one `ProjectAccess`; unserved routes answer `not_found`. See the [assembly notes](../../../../../docs/engineering/project-access.md#product-handler-assembly).
