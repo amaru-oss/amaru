@@ -2140,6 +2140,25 @@ export interface components {
             commit: string;
             contentHash: components["schemas"]["Digest"];
             dirty: boolean;
+        } | {
+            /** @constant */
+            kind: "step_inputs";
+            hash: components["schemas"]["Digest"];
+        } | {
+            /** @constant */
+            kind: "skill";
+            id: string;
+            hash: components["schemas"]["Digest"];
+        } | {
+            /** @constant */
+            kind: "agent";
+            id: string;
+            hash: components["schemas"]["Digest"];
+        } | {
+            /** @constant */
+            kind: "context";
+            id: string;
+            hash: components["schemas"]["Digest"];
         };
         /** ApprovalDecisionRecord */
         ApprovalDecisionRecord: {

@@ -21,7 +21,7 @@
     },
     "rationale": {
       "type": "string",
-      "maxLength": 4000,
+      "maxLength": 1000,
       "description": "Free text. Must not contain secret values."
     },
     "decidedAt": {

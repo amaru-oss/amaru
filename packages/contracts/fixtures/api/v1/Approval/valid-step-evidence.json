@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "id": "01J0Q8Z3X50000000000000001",
+  "projectId": "prj_01",
+  "state": "requested",
+  "gate": {
+    "kind": "step_approval",
+    "stepExecutionId": "se_01",
+    "capability": "scm.pr.create"
+  },
+  "occurrence": {
+    "stepExecutionId": "se_01",
+    "capability": "scm.pr.create",
+    "resource": {
+      "type": "pull_request",
+      "repository": "example/app",
+      "number": 12
+    }
+  },
+  "requester": {
+    "kind": "agent",
+    "id": "agent_impl",
+    "sponsor": "user_01"
+  },
+  "requirement": {
+    "minRole": "maintainer",
+    "separationOfDuties": {
+      "enabled": true,
+      "differFrom": [
+        "agentSponsor"
+      ]
+    }
+  },
+  "evidence": {
+    "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "items": [
+      {
+        "kind": "execution",
+        "id": "ex_01"
+      },
+      {
+        "kind": "step_execution",
+        "id": "se_01"
+      },
+      {
+        "kind": "step_inputs",
+        "hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      {
+        "kind": "definition",
+        "commit": "0123456789abcdef0123456789abcdef01234567",
+        "contentHash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "dirty": false
+      },
+      {
+        "kind": "skill",
+        "id": "review@1.0.0",
+        "hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      {
+        "kind": "agent",
+        "id": "implementer",
+        "hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+      },
+      {
+        "kind": "context",
+        "id": "se_01",
+        "hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+      }
+    ]
+  },
+  "requestedAt": "2026-10-26T09:00:00Z"
+}
