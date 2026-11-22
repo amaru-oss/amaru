@@ -104,6 +104,24 @@ func TestProjectAccess(t *testing.T) {
 	if _, _, err := api.DecideApproval(ctx, a, ownDecision); err != nil {
 		t.Fatal(err)
 	}
+	for _, c := range []struct {
+		project domain.ProjectKey
+		want    string
+	}{{a, first.Approvals[0].ID}, {b, second.Approvals[0].ID}} {
+		list, err := api.Approvals(ctx, c.project, domain.ApprovalApproved)
+		if err != nil || len(list) != 1 || list[0].ID != c.want {
+			t.Fatalf("approved list for %s: %+v %v", c.project, list, err)
+		}
+		if list, err := api.Approvals(ctx, c.project, domain.ApprovalRequested); err != nil || len(list) != 0 {
+			t.Fatalf("requested list for %s: %+v %v", c.project, list, err)
+		}
+	}
+	if list, err := api.Approvals(ctx, a, "pending"); err != domain.ErrInvalid || list != nil {
+		t.Fatalf("unknown state: %+v %v", list, err)
+	}
+	if list, err := api.Approvals(ctx, "ssh://github.com/acme/missing#0123456789abcdef0123456789abcdef01234567", domain.ApprovalApproved); err != domain.ErrNotFound || list != nil {
+		t.Fatalf("unknown Project: %+v %v", list, err)
+	}
 	before := snapshot()
 	for _, id := range []string{second.Execution.ID, "missing"} {
 		t.Run("foreign or missing "+id, func(t *testing.T) {
