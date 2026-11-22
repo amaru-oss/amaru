@@ -6,8 +6,6 @@
   "required": [
     "id",
     "projectId",
-    "capability",
-    "providerId",
     "state",
     "createdAt"
   ],
@@ -25,9 +23,11 @@
       "minLength": 1
     },
     "capability": {
+      "description": "Capability of the Execution's only Step. Absent when the Execution has more than one Step; `steps` is authoritative.",
       "$ref": "CapabilityId.json"
     },
     "providerId": {
+      "description": "Provider that ran the Execution's only Step, when the Platform recorded it. Absent otherwise.",
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]*$"
     },
@@ -102,7 +102,7 @@
       "uniqueItems": true
     },
     "steps": {
-      "description": "Ordered Step Executions of a workflow run. Absent for executions not started from a workflow.",
+      "description": "Ordered Step Executions of the run, in planned order: the authoritative description of what the Execution runs. getExecution and cancelExecution responses include them.",
       "type": "array",
       "items": {
         "$ref": "StepExecution.json"

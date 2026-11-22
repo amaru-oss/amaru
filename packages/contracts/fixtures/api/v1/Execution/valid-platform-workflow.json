@@ -1,0 +1,24 @@
+{
+  "id": "exec-a",
+  "projectId": "ssh://github.com/acme/a#0123456789abcdef0123456789abcdef01234567",
+  "state": "queued",
+  "createdAt": "2026-11-22T12:00:00Z",
+  "steps": [
+    {
+      "stepId": "test",
+      "name": "Run tests",
+      "type": "tool",
+      "capability": "code.test",
+      "executable": true,
+      "state": "queued"
+    },
+    {
+      "stepId": "push",
+      "name": "Push branch",
+      "type": "tool",
+      "capability": "git.push",
+      "executable": true,
+      "state": "awaiting_approval"
+    }
+  ]
+}

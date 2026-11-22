@@ -2535,6 +2535,20 @@
       "kind": "valid",
       "expect": "valid",
       "note": "Exact Platform listApprovals response (default state) for the httpapi approval test seed; services/platform asserts equality"
+    },
+    {
+      "file": "api/v1/Execution/valid-platform-workflow.json",
+      "schema": "Execution.json",
+      "kind": "valid",
+      "expect": "valid",
+      "note": "Exact Platform getExecution response for the httpapi Execution test seed (multi-step Workflow run, no top-level capability or providerId); services/platform asserts equality"
+    },
+    {
+      "file": "api/v1/Execution/valid-platform-single-step.json",
+      "schema": "Execution.json",
+      "kind": "valid",
+      "expect": "valid",
+      "note": "Exact Platform getExecution response for a single-Step Execution submitted without a Workflow; services/platform asserts equality"
     }
   ]
 }
