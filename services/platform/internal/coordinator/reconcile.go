@@ -69,7 +69,7 @@ func WithApprovalIDs(f func() string) Option { return func(c *Coordinator) { c.n
 
 // New returns a Coordinator. now is the clock; the Platform passes time.Now, tests a fixed one.
 func New(store ports.ExecutionStore, now func() time.Time, opts ...Option) *Coordinator {
-	c := &Coordinator{store: store, now: now, leasePeriod: 30 * time.Second, newAttemptID: randomID, newExecutionID: randomID, newApprovalID: randomID, limits: DefaultLimits, timeouts: domain.DefaultTimeouts, rules: domain.DefaultRules(), redactor: domain.DefaultRedactor(), wakeCh: make(chan struct{}), cancels: map[string]chan<- ports.Cancel{}}
+	c := &Coordinator{store: store, now: now, leasePeriod: 30 * time.Second, newAttemptID: randomID, newExecutionID: randomID, newApprovalID: randomULID, limits: DefaultLimits, timeouts: domain.DefaultTimeouts, rules: domain.DefaultRules(), redactor: domain.DefaultRedactor(), wakeCh: make(chan struct{}), cancels: map[string]chan<- ports.Cancel{}}
 	for _, o := range opts {
 		o(c)
 	}
@@ -82,6 +82,36 @@ func randomID() string {
 		panic(err) // the system random source failing is not recoverable
 	}
 	return hex.EncodeToString(b[:])
+}
+
+// crockford is the Crockford base32 alphabet used by the ULID text form.
+const crockford = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+// randomULID returns a ULID (48-bit Unix milliseconds, then 80 random bits, Crockford base32),
+// the id form the public Approval contract requires (Ulid.json). The time prefix only orders ids
+// roughly; ids are opaque and nothing depends on that order.
+func randomULID() string { return ulidAt(time.Now()) }
+
+func ulidAt(t time.Time) string {
+	var b [16]byte
+	ms := uint64(t.UnixMilli())
+	for i := 5; i >= 0; i-- {
+		b[i] = byte(ms)
+		ms >>= 8
+	}
+	if _, err := rand.Read(b[6:]); err != nil {
+		panic(err) // the system random source failing is not recoverable
+	}
+	var out [26]byte
+	// 128 bits as 26 base32 digits: the first digit carries the top 3 bits.
+	hi := uint64(b[0])<<56 | uint64(b[1])<<48 | uint64(b[2])<<40 | uint64(b[3])<<32 | uint64(b[4])<<24 | uint64(b[5])<<16 | uint64(b[6])<<8 | uint64(b[7])
+	lo := uint64(b[8])<<56 | uint64(b[9])<<48 | uint64(b[10])<<40 | uint64(b[11])<<32 | uint64(b[12])<<24 | uint64(b[13])<<16 | uint64(b[14])<<8 | uint64(b[15])
+	for i := 25; i >= 0; i-- {
+		out[i] = crockford[lo&31]
+		lo = lo>>5 | hi<<59
+		hi >>= 5
+	}
+	return string(out[:])
 }
 
 // ReconcileReport counts what Reconcile did, per Step.

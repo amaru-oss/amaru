@@ -2484,6 +2484,50 @@
       "kind": "invalid",
       "expect": "invalid",
       "error": "additionalProperties@/"
+    },
+    {
+      "file": "api/v1/Approval/valid-step-evidence.json",
+      "schema": "Approval.json",
+      "kind": "valid",
+      "expect": "valid",
+      "note": "Evidence items the Platform records for a gated Step (REV-003): Step inputs, pinned definition, Skills, Agent and context"
+    },
+    {
+      "file": "api/v1/Approval/invalid-evidence-skill-without-hash.json",
+      "schema": "Approval.json",
+      "kind": "invalid",
+      "expect": "invalid",
+      "error": "condition@/evidence/items/0"
+    },
+    {
+      "file": "api/v1/Approval/invalid-evidence-agent-bare-hash.json",
+      "schema": "Approval.json",
+      "kind": "invalid",
+      "expect": "invalid",
+      "error": "condition@/evidence/items/0",
+      "note": "Hashes use the Digest form sha256:<hex>"
+    },
+    {
+      "file": "api/v1/Approval/invalid-evidence-step-inputs-extra-field.json",
+      "schema": "Approval.json",
+      "kind": "invalid",
+      "expect": "invalid",
+      "error": "condition@/evidence/items/0"
+    },
+    {
+      "file": "api/v1/DecideApproval/invalid-rationale-too-long.json",
+      "schema": "DecideApproval.json",
+      "kind": "invalid",
+      "expect": "invalid",
+      "error": "maxLength@/rationale",
+      "note": "Bounded by the Platform's recorded rationale limit"
+    },
+    {
+      "file": "api/v1/Approval/valid-platform-requested.json",
+      "schema": "Approval.json",
+      "kind": "valid",
+      "expect": "valid",
+      "note": "Exact Platform HTTP response for the httpapi approval test seed; services/platform asserts equality"
     }
   ]
 }
