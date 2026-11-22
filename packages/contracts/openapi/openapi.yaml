@@ -290,9 +290,11 @@ paths:
     get:
       operationId: listExecutionEvents
       description: >-
-        Persisted events of one Execution, oldest first, up to `limit` (default 1000, max 5000) after the cursor
-        `after` (a `seq`). Unlike the live stream this survives Platform restarts and buffer eviction. Page with
-        `nextCursor`.
+        Persisted events of one Execution, oldest first, up to `limit` (default 1000, max 1000) after the Project
+        cursor `after` (a `seq`). Unlike the live stream this survives Platform restarts and buffer eviction. Page
+        with `nextCursor`. Internal journal entries without a public event shape are omitted, so `seq` values may
+        skip; `nextCursor` still advances past them. A cursor outside the retained window answers `resync` with no
+        events: reload state through the HTTP queries, then resume from `resync.resumeFrom`.
       parameters:
       - $ref: '#/components/parameters/ExecutionId'
       - name: limit
@@ -301,7 +303,7 @@ paths:
         schema:
           type: integer
           minimum: 1
-          maximum: 5000
+          maximum: 1000
       - name: after
         in: query
         required: false

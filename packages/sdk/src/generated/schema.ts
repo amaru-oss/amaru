@@ -237,7 +237,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** @description Persisted events of one Execution, oldest first, up to `limit` (default 1000, max 5000) after the cursor `after` (a `seq`). Unlike the live stream this survives Platform restarts and buffer eviction. Page with `nextCursor`. */
+        /** @description Persisted events of one Execution, oldest first, up to `limit` (default 1000, max 1000) after the Project cursor `after` (a `seq`). Unlike the live stream this survives Platform restarts and buffer eviction. Page with `nextCursor`. Internal journal entries without a public event shape are omitted, so `seq` values may skip; `nextCursor` still advances past them. A cursor outside the retained window answers `resync` with no events: reload state through the HTTP queries, then resume from `resync.resumeFrom`. */
         get: operations["listExecutionEvents"];
         put?: never;
         post?: never;
@@ -1445,12 +1445,24 @@ export interface components {
          */
         Event: components["schemas"]["ExecutionLifecycle"] | components["schemas"]["ExecutionFailed"] | components["schemas"]["ExecutionOutput"] | components["schemas"]["ExecutionProgress"] | components["schemas"]["ExecutionStep"] | components["schemas"]["ArtifactGenerated"] | components["schemas"]["PlatformState"] | components["schemas"]["CatalogChanged"] | components["schemas"]["WorkChanged"] | components["schemas"]["DeliveryLoopDecisionEvent"] | components["schemas"]["CheckoutEvent"] | components["schemas"]["PullRequestEvent"] | components["schemas"]["CheckEvent"] | components["schemas"]["IssueEvent"] | components["schemas"]["ReconcileCompleted"] | components["schemas"]["ApprovalEvent"] | components["schemas"]["PolicyEvaluated"] | components["schemas"]["GrantChanged"] | components["schemas"]["UsageRecorded"] | components["schemas"]["ResultRejectedStale"];
         /**
+         * ResyncRequired
+         * @description Sent instead of replay when the requested cursor cannot be served (older than retained history, or ahead of `lastSeq`). The client must reload state through the HTTP API and resume from `resumeFrom`.
+         */
+        ResyncRequired: {
+            /** @constant */
+            type: "resync_required";
+            /** @enum {unknown} */
+            reason: "cursor_too_old" | "cursor_ahead" | "history_unavailable";
+            resumeFrom: number;
+        };
+        /**
          * EventList
-         * @description Persisted events of one Project or Execution, oldest first. `nextCursor` is the `seq` to resume from.
+         * @description Persisted events of one Project or Execution, oldest first. `nextCursor` is the `seq` to resume from. When the requested cursor cannot be served the list carries `resync` and no events (no partial history alongside it).
          */
         EventList: {
             events: components["schemas"]["Event"][];
             nextCursor?: number;
+            resync?: components["schemas"]["ResyncRequired"];
         };
         /** LocalCheck */
         LocalCheck: {
@@ -2222,17 +2234,6 @@ export interface components {
             protocolVersion: 1;
             platformVersion: string;
             lastSeq: number;
-        };
-        /**
-         * ResyncRequired
-         * @description Sent instead of replay when the requested cursor cannot be served (older than retained history, or ahead of `lastSeq`). The client must reload state through the HTTP API and resume from `resumeFrom`.
-         */
-        ResyncRequired: {
-            /** @constant */
-            type: "resync_required";
-            /** @enum {unknown} */
-            reason: "cursor_too_old" | "cursor_ahead" | "history_unavailable";
-            resumeFrom: number;
         };
         /**
          * Frame

@@ -1,0 +1,76 @@
+{
+  "events": [
+    {
+      "id": "01M81J19F8CRWNK82YWGBWQPX0",
+      "seq": 1,
+      "type": "execution.step",
+      "time": "2026-11-22T12:00:01Z",
+      "projectId": "id:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "executionId": "exec-b",
+      "resource": {
+        "type": "execution",
+        "id": "exec-b"
+      },
+      "data": {
+        "stepId": "push",
+        "state": "leased"
+      }
+    },
+    {
+      "id": "01M81J1AEG9KN9D07Z0XV3T4Z5",
+      "seq": 2,
+      "type": "execution.step",
+      "time": "2026-11-22T12:00:02Z",
+      "projectId": "id:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "executionId": "exec-b",
+      "resource": {
+        "type": "execution",
+        "id": "exec-b"
+      },
+      "data": {
+        "stepId": "push",
+        "state": "running"
+      }
+    },
+    {
+      "id": "01M81J1CD0WN2B7MKGV4K43RAY",
+      "seq": 4,
+      "type": "execution.step",
+      "time": "2026-11-22T12:00:04Z",
+      "projectId": "id:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "executionId": "exec-b",
+      "resource": {
+        "type": "execution",
+        "id": "exec-b"
+      },
+      "data": {
+        "stepId": "push",
+        "state": "failed",
+        "error": {
+          "code": "exit_1",
+          "message": "push rejected"
+        }
+      }
+    },
+    {
+      "id": "01M81J1CD0V2KRXS6NTQNCYWHR",
+      "seq": 5,
+      "type": "execution.failed",
+      "time": "2026-11-22T12:00:04Z",
+      "projectId": "id:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "executionId": "exec-b",
+      "resource": {
+        "type": "execution",
+        "id": "exec-b"
+      },
+      "data": {
+        "state": "failed",
+        "error": {
+          "code": "exit_1",
+          "message": "push rejected"
+        }
+      }
+    }
+  ],
+  "nextCursor": 5
+}
