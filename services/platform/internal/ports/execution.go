@@ -49,6 +49,9 @@ type ExecutionStore interface {
 	Commit(ctx context.Context, c ExecutionChange) (ExecutionChange, error)
 	// Get returns the Execution and its Steps in creation order, or domain.ErrNotFound.
 	Get(ctx context.Context, id string) (domain.Execution, []domain.StepExecution, error)
+	// ProjectExecutions returns the ids of the Project's Executions, newest first (created time,
+	// then id, both descending). An unknown Project has none.
+	ProjectExecutions(ctx context.Context, projectID string) ([]string, error)
 	// Open returns the id of every Execution that is not in a terminal state, ordered by id.
 	Open(ctx context.Context) ([]string, error)
 	// Events returns the Execution's log in Seq order.

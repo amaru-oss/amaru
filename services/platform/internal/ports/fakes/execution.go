@@ -399,6 +399,28 @@ func (s *ExecutionStore) Approvals(_ context.Context, executionID string) ([]dom
 	return out, nil
 }
 
+func (s *ExecutionStore) ProjectExecutions(_ context.Context, projectID string) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list := []domain.Execution{}
+	for _, e := range s.execs {
+		if e.ProjectID == projectID {
+			list = append(list, e)
+		}
+	}
+	sort.Slice(list, func(i, j int) bool {
+		if !list[i].CreatedAt.Equal(list[j].CreatedAt) {
+			return list[i].CreatedAt.After(list[j].CreatedAt)
+		}
+		return list[i].ID > list[j].ID
+	})
+	out := make([]string, len(list))
+	for i, e := range list {
+		out[i] = e.ID
+	}
+	return out, nil
+}
+
 func (s *ExecutionStore) ProjectApprovals(_ context.Context, projectID string, state domain.ApprovalState) ([]domain.Approval, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

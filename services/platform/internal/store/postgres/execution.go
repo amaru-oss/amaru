@@ -572,3 +572,23 @@ func pinArgs(p *domain.DefinitionPin) pinned {
 	}
 	return pinned{nullString(p.WorkflowID), nullString(p.Revision), nullString(p.Hash), nullString(string(p.Snapshot)), nullString(p.CloneRoot)}
 }
+
+func (s *ExecutionStore) ProjectExecutions(ctx context.Context, projectID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM executions WHERE project_id = $1 ORDER BY created_at DESC, id DESC`, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: project executions: %w", err)
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("postgres: project executions: %w", err)
+		}
+		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("postgres: project executions: %w", err)
+	}
+	return out, nil
+}
