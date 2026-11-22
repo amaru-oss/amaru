@@ -1966,6 +1966,20 @@
       "note": "Prototype returned a bare array; WRK-003 returns an object with nextCursor"
     },
     {
+      "file": "events/v1/EventList/valid-platform-cancelled.json",
+      "schema": "events/EventList.json",
+      "kind": "valid",
+      "expect": "valid",
+      "note": "Exact Platform listExecutionEvents output after a cancel; the cancel_requested entry (seq 1) has no public shape"
+    },
+    {
+      "file": "events/v1/EventList/valid-platform-failed.json",
+      "schema": "events/EventList.json",
+      "kind": "valid",
+      "expect": "valid",
+      "note": "Exact Platform listExecutionEvents output for a failed run; the restart retry entry (seq 3) has no public shape"
+    },
+    {
       "file": "events/v1/EventList/valid-with-cursor.json",
       "schema": "events/EventList.json",
       "kind": "valid",

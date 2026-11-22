@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -23,9 +24,10 @@ import (
 )
 
 type executionEnv struct {
-	auth  *localauth.Auth
-	h     http.Handler
-	store *fakes.ExecutionStore
+	auth   *localauth.Auth
+	h      http.Handler
+	events http.Handler
+	store  *fakes.ExecutionStore
 }
 
 // executionSetup composes real compact auth, the authorized application boundary and fake
@@ -87,6 +89,9 @@ func executionSetup(t *testing.T) *executionEnv {
 		t.Fatal(err)
 	}
 	if env.h, err = ExecutionsHandler(auth, access); err != nil {
+		t.Fatal(err)
+	}
+	if env.events, err = ExecutionEventsHandler(auth, access, env.store, domain.CompactReplayWindow); err != nil {
 		t.Fatal(err)
 	}
 	return env
@@ -281,17 +286,17 @@ func TestExecutionRoutesMatchOpenAPI(t *testing.T) {
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		t.Fatal(err)
 	}
-	for _, pattern := range executionPatterns {
+	served := append(slices.Clone(executionPatterns), executionEventPatterns...)
+	for _, pattern := range served {
 		method, target, _ := strings.Cut(pattern, " ")
 		if _, ok := doc.Paths[strings.TrimPrefix(target, "/v1")][strings.ToLower(method)]; !ok {
 			t.Fatalf("undocumented route: %s", pattern)
 		}
 	}
-	// Documented Execution operations not served yet: create needs Agent, Skill and Environment
-	// resolution; Event replay needs its envelope mapping.
+	// The documented Execution operation not served yet: create needs Agent, Skill and
+	// Environment resolution.
 	pending := map[string]bool{
-		"POST /v1/projects/{projectId}/executions":            true,
-		"GET /v1/projects/{projectId}/executions/{id}/events": true,
+		"POST /v1/projects/{projectId}/executions": true,
 	}
 	for path, ops := range doc.Paths {
 		if !strings.HasPrefix(path, "/projects/{projectId}/executions") {
@@ -302,12 +307,9 @@ func TestExecutionRoutesMatchOpenAPI(t *testing.T) {
 				continue
 			}
 			route := strings.ToUpper(method) + " /v1" + path
-			served := false
-			for _, pattern := range executionPatterns {
-				served = served || pattern == route
-			}
-			if served == pending[route] {
-				t.Fatalf("Execution route inventory drifted: %s served=%v", route, served)
+			isServed := slices.Contains(served, route)
+			if isServed == pending[route] {
+				t.Fatalf("Execution route inventory drifted: %s served=%v", route, isServed)
 			}
 		}
 	}
