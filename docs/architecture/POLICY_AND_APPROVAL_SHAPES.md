@@ -147,6 +147,9 @@ An Approval is a human decision bound to specific Evidence ([ADR-0036](adr/0036-
 | `artifact` | Artifact id and content hash (version) | A new Artifact version is produced for the same role. |
 | `check_result` | Local Check, CI or Verification outcome bound to a commit or Artifact | A re-run produces a different result record, or the commit it checked changed. |
 | `definition` | Workflow version commit and content hash (ADR-0043); `dirty` flags uncommitted edits | The Workflow definition resolved for the Execution changes. |
+| `step_inputs` | Hash of the Step's Capability and inputs | The Step is asked to do something else. |
+| `skill`, `agent` | Pinned Skill (`name@version`) or Agent definition and its content hash (FEAT-REV-003) | The Step pins a different Skill or Agent version. |
+| `context` | Step id and hash of the assembled context (FEAT-SKL-002) | A different context is assembled for the Step. |
 
 `work_item_acceptance` gates bind, additionally, the Work Item's delivered Artifacts and the approved Step Approvals they rely on.
 

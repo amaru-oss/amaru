@@ -20,7 +20,7 @@ Inspected against `packages/contracts/openapi/openapi.yaml` and the [coordinator
 | Execution detail/cancel | Project-bound `Execution` and `Cancel` | HTTP handlers and shared contract/SDK acceptance |
 | Execution definition/Evidence | Ownership before pinned definition return or Evidence assembly | Public mapping; direct Artifact version/content application access now checks ownership (below) |
 | Project and Execution Event replay | Project authorization plus ownership of any Execution filter before the existing journal read; trusted clock/window | Typed envelope mapping, WebSocket lifecycle and cursor wire mapping |
-| Approval detail/decision | Project-bound `Approval` and `DecideApproval` before replay | List/query adapters, HTTP handlers and contract/SDK acceptance |
+| Approval detail/decision | Project-bound `Approval` and `DecideApproval` before replay; guarded HTTP adapter for `getApproval`/`decideApproval` ([below](#guarded-approval-http-adapter)) | `listApprovals` (needs a Project-scoped query), product startup wiring and SDK/product acceptance |
 | Project list/detail/attach | Existing Project/attach components are unchanged | Authenticated product composition |
 | Execution lists, Work Packages/Items and dependencies | No new implementation | Project-selected authoritative query/mutation paths; reject cross-Project dependencies |
 | Workflow/Agent/Team CRUD/source | `Workflow` reads the selected Project's committed Workflow at an explicit revision | Other definition types, CRUD, versioned API/disk reconciliation (#219) |
@@ -312,3 +312,11 @@ Storage/missing/foreign-resource error precedence is unchanged. These fake-backe
 unit tests do not establish continuous session validity or atomic authorization
 with response delivery. Project inspection/list/attach operations and mutations
 are outside this bounded read slice; #191/#18/M3 acceptance remains open.
+
+## Guarded Approval HTTP adapter
+
+`httpapi.ApprovalsHandler` serves `GET /v1/projects/{projectId}/approvals/{approvalId}` and `POST .../decision` through compact authentication and `ProjectAccess` (2026-11-22, Refs #191/#197/#18). The decision path checks Project ownership before reading the body, decodes `DecideApproval` strictly (unknown fields, a second document, a wrong media type or a body over 8 KiB are `invalid_request`) and takes the decider from the session, never from the body. A changed Evidence digest, a decided Approval and a reused idempotency key are `conflict`; foreign and missing Approvals return the same `not_found`. A same-key replay returns the original body.
+
+The adapter maps stored Approvals to `Approval.json` without inventing data. Agent hashes are recorded as bare SHA-256 hex and are rendered in the `sha256:` Digest form. A `definition` item is described only when the owning Execution's pin is that exact committed definition; its commit is the pin's revision and `dirty` is false. A voided Approval (the contract requires the voiding Event id, which is not recorded), an uncommitted definition, an unknown Evidence kind and an agent or trigger requester without a sponsor return `internal`. Approval ids are now ULIDs, as `Ulid.json` requires. The Platform bounds rationale at 1000 bytes; the contract states 1000 characters, so multi-byte text near the limit can be refused as `invalid_request`.
+
+Evidence: [Linux Approval HTTP record](../validation/m3/2026-11-22-linux-approval-http.md). Integration-tested with fake stores, real compact authentication and in-process requests; the seeded response is the shared fixture `Approval/valid-platform-requested.json`, validated in Go and TypeScript. Not established: production startup wiring, PostgreSQL-backed HTTP, a browser client, `listApprovals`, or macOS/Windows runs. #191/#18/M3 remain open.

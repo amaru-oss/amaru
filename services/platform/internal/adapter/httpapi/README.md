@@ -1,4 +1,4 @@
-# Project settings HTTP adapter
+# Project HTTP adapters (settings, Approvals)
 
 Owned by WP-M3-06 (#18), Project isolation #191. `SettingsHandler` serves the existing Project settings GET/PATCH resource through compact authentication and the authorized application boundary. [ADR-0059](../../../../../docs/architecture/adr/0059-adapt-the-prototype-http-handlers-to-the-platform-public-api.md) permits fresh handlers where Amaru contracts differ; this code is written fresh, with no predecessor material copied. ADR-0062 and ADR-0064 define access and preference semantics.
 
@@ -7,3 +7,5 @@ Trusted composition supplies one Auth instance, ProjectAccess using its Principa
 From the repository root, `make platform-test` runs these tests and `make check` runs the full checks. For focused race verification, from `services/platform`, run `go test -race -count=10 ./internal/adapter/httpapi`. Tests use fake stores, real compact authentication and a temporary loopback listener; no paid APIs or real agents. The generated SDK also exercises these handlers in the test-only auth fixture via `make sdk-ts`; actual browser SDK and full product acceptance remain separate.
 
 See the [operation inventory and limits](../../../../../docs/engineering/project-access.md#guarded-settings-http-adapter).
+
+`ApprovalsHandler` serves the Approval read and decision operations on the same terms: one Auth instance, the authorized `ProjectAccess` boundary and no production startup. `listApprovals` is not served. See the [Approval adapter notes](../../../../../docs/engineering/project-access.md#guarded-approval-http-adapter).
