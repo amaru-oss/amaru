@@ -1,0 +1,9 @@
+{
+  "events": [],
+  "nextCursor": 42,
+  "resync": {
+    "type": "resync_required",
+    "reason": "cursor_ahead",
+    "resumeFrom": 42
+  }
+}

@@ -1979,6 +1979,28 @@
       "source": "protocol/fixtures/events/EventList.valid.json"
     },
     {
+      "file": "events/v1/EventList/valid-resync.json",
+      "schema": "events/EventList.json",
+      "kind": "valid",
+      "expect": "valid"
+    },
+    {
+      "file": "events/v1/EventList/invalid-resync-with-events.json",
+      "schema": "events/EventList.json",
+      "kind": "invalid",
+      "expect": "invalid",
+      "error": "maxItems@/events",
+      "note": "A resync answer carries no partial history"
+    },
+    {
+      "file": "events/v1/EventList/invalid-resync-with-cursor.json",
+      "schema": "events/EventList.json",
+      "kind": "invalid",
+      "expect": "invalid",
+      "error": "condition@/",
+      "note": "A resync answer resumes from resync.resumeFrom, not nextCursor"
+    },
+    {
       "file": "events/v1/Frame/invalid-unknown-frame.json",
       "schema": "events/Frame.json",
       "kind": "invalid",

@@ -1,0 +1,8 @@
+{
+  "events": [],
+  "resync": {
+    "type": "resync_required",
+    "reason": "cursor_too_old",
+    "resumeFrom": 42
+  }
+}
