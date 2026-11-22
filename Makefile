@@ -65,6 +65,8 @@ platform-test:
 # create databases. Linux only so far; see docs/engineering/validation.md.
 platform-test-pg:
 	@test -n "$$AMARU_TEST_PG" || { echo "set AMARU_TEST_PG to a PostgreSQL DSN, e.g. postgres://user:pass@127.0.0.1:5432/postgres?sslmode=disable"; exit 2; }
+	# The SDK PostgreSQL fixture runs Node against the SDK; install its pinned dependencies first.
+	cd $(SDK) && pnpm install --frozen-lockfile
 	cd $(PLATFORM) && go test -count=1 -tags pg ./...
 
 # The real experiments: needs a bundle made by `spike bundle` (network at build time). See spikes/wp-m1-02/README.md.
