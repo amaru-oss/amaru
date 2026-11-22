@@ -25,10 +25,14 @@ type readAuthorityStore struct {
 
 func (s readAuthorityStore) Get(context.Context, string) (domain.Execution, []domain.StepExecution, error) {
 	s.after()
+	project := string(s.project)
+	if s.stepExecution == "foreign-approval" {
+		project, s.stepExecution = "foreign-project", ""
+	}
 	if s.stepExecution == "" {
 		s.stepExecution = "execution"
 	}
-	return domain.Execution{ID: "execution", ProjectID: string(s.project)}, []domain.StepExecution{{ID: "step", ExecutionID: s.stepExecution}}, s.failure
+	return domain.Execution{ID: "execution", ProjectID: project}, []domain.StepExecution{{ID: "step", ExecutionID: s.stepExecution}}, s.failure
 }
 func (s readAuthorityStore) Approval(context.Context, string) (domain.Approval, error) {
 	s.after()
@@ -44,6 +48,14 @@ func (s readAuthorityStore) ProjectApprovals(_ context.Context, project string, 
 		project = "foreign-project"
 	}
 	return []domain.Approval{{ID: "approval", ProjectID: project, State: state}}, nil
+}
+
+func (s readAuthorityStore) ProjectExecutions(context.Context, string) ([]string, error) {
+	if s.failure != nil {
+		s.after()
+		return nil, s.failure
+	}
+	return []string{"execution"}, nil
 }
 
 type readAuthorityProjects struct {
@@ -94,15 +106,15 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 	project := domain.ProjectKey("ssh://github.com/acme/a#0123456789abcdef0123456789abcdef01234567")
 	owner := domain.Principal{Kind: domain.PrincipalHuman, ID: "owner", Role: domain.RoleOwner}
 	failed := errors.New("storage unavailable")
-	for _, operation := range []string{"project lookup", "execution", "approval", "approvals", "events", "evidence", "settings", "artifact versions", "artifact content", "event ownership", "evidence ownership", "artifact ownership"} {
+	for _, operation := range []string{"project lookup", "execution", "executions", "approval", "approvals", "events", "evidence", "settings", "artifact versions", "artifact content", "event ownership", "evidence ownership", "artifact ownership"} {
 		for _, outcome := range []string{"authorized", "revoked", "canceled", "identity changed", "storage error", "storage error with identity changed", "different record", "foreign bundle", "foreign step", "foreign approval", "foreign event project", "foreign event execution"} {
 			if outcome == "different record" && operation != "execution" && operation != "approval" && operation != "evidence" {
 				continue
 			}
-			if outcome == "foreign step" && operation != "execution" {
+			if outcome == "foreign step" && operation != "execution" && operation != "executions" {
 				continue
 			}
-			if outcome == "foreign approval" && operation != "approvals" {
+			if outcome == "foreign approval" && operation != "approvals" && operation != "executions" {
 				continue
 			}
 			if outcome == "foreign bundle" && operation != "evidence" {
@@ -149,7 +161,7 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 				if operation == "project lookup" {
 					projectStore = readAuthorityProjects{projects, after}
 				}
-				if operation == "execution" || operation == "approval" || operation == "approvals" || strings.HasSuffix(operation, "ownership") {
+				if operation == "execution" || operation == "executions" || operation == "approval" || operation == "approvals" || strings.HasSuffix(operation, "ownership") {
 					store.after, store.failure = after, failure
 				}
 				api, err := coordinator.NewProjectAccess(coordinator.New(store, time.Now), projectStore, func(context.Context) (domain.Principal, error) {
@@ -193,6 +205,10 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 					var steps []domain.StepExecution
 					e, steps, err = api.Execution(ctx, project, executionID)
 					got, zero = []any{e, steps}, []any{domain.Execution{}, []domain.StepExecution(nil)}
+				case "executions":
+					var list []coordinator.ExecutionRecord
+					list, err = api.Executions(ctx, project)
+					got, zero = list, []coordinator.ExecutionRecord(nil)
 				case "approval":
 					got, err = api.Approval(ctx, project, approvalID)
 					zero = domain.Approval{}
@@ -247,7 +263,7 @@ func TestProjectReadAuthorityDuringIO(t *testing.T) {
 					return
 				}
 				want := failed
-				if outcome == "foreign approval" {
+				if outcome == "foreign approval" || (outcome == "foreign step" && operation == "executions") {
 					if err == nil || errors.Is(err, domain.ErrNotFound) || !reflect.DeepEqual(got, zero) {
 						t.Fatalf("foreign row must fail the read without data: %v", err)
 					}

@@ -108,6 +108,50 @@ func (a *ProjectAccess) Execution(ctx context.Context, project domain.ProjectKey
 	return e, steps, nil
 }
 
+// ExecutionRecord is one Execution with its Steps in creation order.
+type ExecutionRecord struct {
+	Execution domain.Execution
+	Steps     []domain.StepExecution
+}
+
+// Executions lists the selected Project's Executions, newest first. Identity is rechecked after
+// the store reads; an Execution or Step from another Project fails the whole read rather than
+// being filtered, because the store contract was broken.
+func (a *ProjectAccess) Executions(ctx context.Context, project domain.ProjectKey) ([]ExecutionRecord, error) {
+	by, err := a.authorize(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	ids, err := a.coordinator.store.ProjectExecutions(ctx, string(project))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ExecutionRecord, 0, len(ids))
+	for _, id := range ids {
+		e, steps, err := a.coordinator.store.Get(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if e.ID != id || e.ProjectID != string(project) {
+			return nil, errors.New("project executions: store returned a row outside the query")
+		}
+		for _, step := range steps {
+			if step.ExecutionID != id {
+				return nil, errors.New("project executions: store returned a step of another execution")
+			}
+		}
+		out = append(out, ExecutionRecord{Execution: e, Steps: steps})
+	}
+	current, err := a.authorize(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	if current.ID != by.ID {
+		return nil, domain.ErrNotPermitted
+	}
+	return out, nil
+}
+
 // Submit derives attribution and Project identity from authorized context, not the body.
 // Workflow/Steps remain trusted internal inputs; named committed Workflow runs use RunWorkflow.
 // This method is not an HTTP create/run handler.
