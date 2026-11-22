@@ -2521,6 +2521,13 @@
       "expect": "invalid",
       "error": "maxLength@/rationale",
       "note": "Bounded by the Platform's recorded rationale limit"
+    },
+    {
+      "file": "api/v1/Approval/valid-platform-requested.json",
+      "schema": "Approval.json",
+      "kind": "valid",
+      "expect": "valid",
+      "note": "Exact Platform HTTP response for the httpapi approval test seed; services/platform asserts equality"
     }
   ]
 }
