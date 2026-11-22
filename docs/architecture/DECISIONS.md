@@ -103,7 +103,7 @@ Amaru records significant decisions as Architecture Decision Records (ADRs) in [
 
 | [0068](adr/0068-platform-process-readiness-and-bounded-shutdown.md) | Gate Platform process readiness and bound shutdown with one lifecycle owner | accepted | 2026-11-13 |
 
-| [0070](adr/0070-project-scoped-work-command-contract.md) | Define Project-scoped Work ownership, keys, reopening and command concurrency | proposed | 2026-11-14 |
+| [0070](adr/0070-project-scoped-work-command-contract.md) | Define Project-scoped Work ownership, keys, reopening and command concurrency | accepted | 2026-11-14 |
 | [0072](adr/0072-compact-linux-discovery-uses-one-per-user-state-directory.md) | Resolve compact Linux discovery from one per-user state directory | accepted | 2026-11-20 |
 
 ADRs 0002–0005 and 0008–0039 were accepted by the product owner on 2026-10-25 in the planning session that closed every question in [OPEN_QUESTIONS](OPEN_QUESTIONS.md). Where the owner delegated a question ("you can decide"), the ADR's Approval section says so. ADRs 0040–0043 were accepted the same day under the owner's delegation in a second planning pass that closed the residual questions Q23–Q54; they supersede 0020, 0019, 0014 and 0027 respectively, which stay in the log as `superseded`. ADRs 0044 and 0045 were drafted by an agent from the WP-M1-02 spike and accepted by the product owner on 2026-10-26.

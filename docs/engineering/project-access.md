@@ -241,7 +241,7 @@ This extends the committed Workflow composition evidence under accepted ADR-0062
 
 ## Work contract proposal (#191)
 
-[ADR-0070](../architecture/adr/0070-project-scoped-work-command-contract.md) is **proposed**, with empty deciders: omitted human-kind owner, Instance-unique allocated display prefixes, explicit reopen reason/history, and command keys plus optimistic versions. It specifies immutable Project ownership, same-Project dependencies and atomic Work/outcome/Event writes under accepted ADR-0058. [Q68](../architecture/OPEN_QUESTIONS.md#q68-project-scoped-work-contract-and-unresolved-mappings) tracks owner approval and unresolved principal, optional-field and dependency-regression mappings. These are implementation gates, not public Work behavior. Schemas, fixtures, SDK, application and storage remain unchanged by the proposal; #191/#18/M3 remain open.
+[ADR-0070](../architecture/adr/0070-project-scoped-work-command-contract.md) is **accepted** (Ricardo Lüders, 2026-11-22): omitted human-kind owner, Instance-unique allocated display prefixes, explicit reopen reason/history, and command keys plus optimistic versions. It specifies immutable Project ownership, same-Project dependencies and atomic Work/outcome/Event writes under accepted ADR-0058. [Q68](../architecture/OPEN_QUESTIONS.md#q68-project-scoped-work-contract-and-unresolved-mappings) tracks the unresolved principal, optional-field and dependency-regression mappings. Acceptance authorizes implementation of the approved choices; nothing is implemented yet, so this is not public Work behavior. Schemas, fixtures, SDK, application and storage remain unchanged; #191/#18/M3 remain open.
 
 ## Authority loss during query IO
 
@@ -284,8 +284,8 @@ commit**; authority may change after the check or during coordinator IO. No
 transaction, contract, public route or Work command scope changes.
 
 The [Linux mutation resource IO record](../validation/m3/2026-11-14-linux-prj-002-mutation-session-io.md)
-records deterministic fake-backed tests and their limits. ADR-0070 remains
-proposed and untouched; full #191/#18/M3 acceptance remains open.
+records deterministic fake-backed tests and their limits. ADR-0070 was
+proposed and untouched at that time (accepted 2026-11-22); full #191/#18/M3 acceptance remains open.
 
 
 The [Linux Project lookup identity record](../validation/m3/2026-11-14-linux-prj-002-lookup-identity.md)
