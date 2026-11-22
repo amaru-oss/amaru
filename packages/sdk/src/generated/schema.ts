@@ -1081,8 +1081,10 @@ export interface components {
             checkout?: components["schemas"]["Checkout"];
             id: string;
             projectId: string;
-            capability: components["schemas"]["CapabilityId"];
-            providerId: string;
+            /** @description Capability of the Execution's only Step. Absent when the Execution has more than one Step; `steps` is authoritative. */
+            capability?: components["schemas"]["CapabilityId"];
+            /** @description Provider that ran the Execution's only Step, when the Platform recorded it. Absent otherwise. */
+            providerId?: string;
             /** @description What was requested. Present on executions created by this Platform; user-authored text, never credentials. */
             input?: {
                 prompt?: string;
@@ -1100,7 +1102,7 @@ export interface components {
             workflowId?: components["schemas"]["WorkflowId"];
             /** @description Project-relative files the execution produced (asset.generate; workflow runs: the union of step outputs). Absent otherwise. */
             outputs?: string[];
-            /** @description Ordered Step Executions of a workflow run. Absent for executions not started from a workflow. */
+            /** @description Ordered Step Executions of the run, in planned order: the authoritative description of what the Execution runs. getExecution and cancelExecution responses include them. */
             steps?: components["schemas"]["StepExecution"][];
         } & (unknown & unknown & unknown);
         /** ExecutionList */
