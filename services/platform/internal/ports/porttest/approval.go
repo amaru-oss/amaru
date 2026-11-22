@@ -244,4 +244,63 @@ func ApprovalStore(t *testing.T, newStore func(t *testing.T) ports.ExecutionStor
 			t.Fatalf("audit %+v", evs)
 		}
 	})
+
+	t.Run("a Project's Approvals by state, newest request first, isolated from other Projects", func(t *testing.T) {
+		s := newStore(t)
+		create := func(exec, project string, at time.Time) (domain.Approval, domain.StepExecution) {
+			t.Helper()
+			e, steps := newExec(exec, exec+".s")
+			if err := steps[0].RequireApproval(); err != nil {
+				t.Fatal(err)
+			}
+			a := newApproval(t, exec+".a", exec, steps[0].ID)
+			a.ProjectID, a.RequestedAt = project, at
+			_, cs, err := s.CreateOnce(ctx, rec("k-"+exec), e, steps, a)
+			if err != nil {
+				t.Fatal(err)
+			}
+			a.Version = 1
+			return a, cs[0]
+		}
+		create("e1", "p1", t0)
+		create("e2", "p1", t0.Add(time.Minute))
+		create("e3", "p1", t0.Add(time.Minute)) // same time as e2: the larger id comes first
+		create("e4", "p2", t0.Add(2*time.Minute))
+		decided, st := create("e5", "p1", t0.Add(3*time.Minute))
+		if err := decided.Decide(t0.Add(4*time.Minute), maintainer, domain.OutcomeApproved, "", decided.Evidence.Digest); err != nil {
+			t.Fatal(err)
+		}
+		if err := st.Approve(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.Commit(ctx, ports.ExecutionChange{Steps: []domain.StepExecution{st}, Approvals: []domain.Approval{decided}}); err != nil {
+			t.Fatal(err)
+		}
+		r := reopen(t, s)
+		for _, c := range []struct {
+			project string
+			state   domain.ApprovalState
+			want    []string
+		}{
+			{"p1", domain.ApprovalRequested, []string{"e3.a", "e2.a", "e1.a"}},
+			{"p1", domain.ApprovalApproved, []string{"e5.a"}},
+			{"p1", domain.ApprovalRejected, nil},
+			{"p2", domain.ApprovalRequested, []string{"e4.a"}},
+			{"unknown", domain.ApprovalRequested, nil},
+		} {
+			got, err := r.ProjectApprovals(ctx, c.project, c.state)
+			if err != nil || got == nil || len(got) != len(c.want) {
+				t.Fatalf("%s/%s: %+v, %v", c.project, c.state, got, err)
+			}
+			for i, a := range got {
+				if a.ID != c.want[i] || a.ProjectID != c.project || a.State != c.state {
+					t.Fatalf("%s/%s[%d]: %+v, want %s", c.project, c.state, i, a, c.want[i])
+				}
+			}
+		}
+		got, _ := r.ProjectApprovals(ctx, "p1", domain.ApprovalApproved)
+		if got[0].Decision == nil || got[0].Decision.Approver != "m1" || got[0].Version != 2 || len(got[0].Evidence.Items) != 2 {
+			t.Fatalf("decided %+v", got[0])
+		}
+	})
 }
