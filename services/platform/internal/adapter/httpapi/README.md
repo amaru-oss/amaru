@@ -1,4 +1,4 @@
-# Project HTTP adapters (settings, Approvals, Executions)
+# Project HTTP adapters (settings, Approvals, Executions, Execution Events)
 
 Owned by WP-M3-06 (#18), Project isolation #191. `SettingsHandler` serves the existing Project settings GET/PATCH resource through compact authentication and the authorized application boundary. [ADR-0059](../../../../../docs/architecture/adr/0059-adapt-the-prototype-http-handlers-to-the-platform-public-api.md) permits fresh handlers where Amaru contracts differ; this code is written fresh, with no predecessor material copied. ADR-0062 and ADR-0064 define access and preference semantics.
 
@@ -10,4 +10,4 @@ See the [operation inventory and limits](../../../../../docs/engineering/project
 
 `ApprovalsHandler` serves the Approval list, read and decision operations on the same terms: one Auth instance, the authorized `ProjectAccess` boundary and no production startup. See the [Approval adapter notes](../../../../../docs/engineering/project-access.md#guarded-approval-http-adapter).
 
-`ExecutionsHandler` serves the Execution list, read and cancel operations on the same terms. See the [Execution adapter notes](../../../../../docs/engineering/project-access.md#guarded-execution-http-adapter).
+`ExecutionsHandler` serves the Execution list, read and cancel operations on the same terms. See the [Execution adapter notes](../../../../../docs/engineering/project-access.md#guarded-execution-http-adapter). `ExecutionEventsHandler` serves one Execution's persisted Events (`listExecutionEvents`) on the same terms, with a trusted Event stream and replay window. See the [Event replay notes](../../../../../docs/engineering/project-access.md#execution-event-replay-over-http).
